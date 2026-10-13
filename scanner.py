@@ -114,7 +114,16 @@ def fetch_linkedin_leads() -> List[Dict]:
                     if link_elem and "href" in link_elem.attrs
                     else f"https://www.linkedin.com/jobs/view/{job_id}"
                 )
-                posted = time_elem.get_text(strip=True) if time_elem else "Recent"
+                posted = "Recent"
+                if time_elem:
+                    rel_time = time_elem.get_text(strip=True)
+                    dt_attr = time_elem.get("datetime")
+                    if rel_time and dt_attr:
+                        posted = f"{rel_time} ({dt_attr})"
+                    elif rel_time:
+                        posted = rel_time
+                    elif dt_attr:
+                        posted = dt_attr
 
                 if not job_id:
                     # fallback ID from URL
@@ -253,7 +262,7 @@ def send_to_telegram(lead: Dict) -> bool:
     msg = f"{icon} <b>New Lead: {html.escape(lead['title'])}</b>\n\n"
     msg += f"🏢 <b>Company:</b> {html.escape(lead['company'])}\n"
     msg += f"📍 <b>Location:</b> {html.escape(lead['location'])}\n"
-    msg += f"⏱ <b>Posted:</b> {html.escape(lead.get('posted', 'Recent'))}\n"
+    msg += f"⏱ <b>Published:</b> <code>{html.escape(lead.get('posted', 'Recent'))}</code>\n"
     msg += f"🏷 <b>Source:</b> {lead['source']} (Remote Contract)\n"
 
     if lead.get("directContact"):
