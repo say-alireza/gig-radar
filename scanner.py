@@ -1,14 +1,16 @@
 import os
 import json
 import time
+from datetime import datetime, timezone, timedelta
 import re
 import html
 import urllib.parse
-from typing import List, Dict, Optional
+from typing import List, Dict, Tuple, Optional
 import requests
 from bs4 import BeautifulSoup
 
 SEEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seen_leads.json")
+STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "status_state.json")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "96092687")
 FORCE_SEND = os.environ.get("FORCE_SEND", "").lower() in ("true", "1")
@@ -37,7 +39,6 @@ def load_seen_leads() -> Dict[str, int]:
     try:
         with open(SEEN_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Prune leads older than 30 days
             now = int(time.time())
             pruned = {k: v for k, v in data.items() if now - v < 30 * 86400}
             return pruned
@@ -52,6 +53,25 @@ def save_seen_leads(seen: Dict[str, int]) -> None:
             json.dump(seen, f, indent=2)
     except Exception as e:
         print(f"[Error] Failed to save {SEEN_FILE}: {e}")
+
+
+def load_status_state() -> Dict:
+    if not os.path.exists(STATUS_FILE):
+        return {}
+    try:
+        with open(STATUS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[Warn] Failed to load {STATUS_FILE}: {e}")
+        return {}
+
+
+def save_status_state(state: Dict) -> None:
+    try:
+        with open(STATUS_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        print(f"[Error] Failed to save {STATUS_FILE}: {e}")
 
 
 def generate_pitch(title: str, company: str, snippet: str) -> str:
@@ -73,9 +93,10 @@ def generate_pitch(title: str, company: str, snippet: str) -> str:
         )
 
 
-def fetch_linkedin_leads() -> List[Dict]:
+def fetch_linkedin_leads() -> Tuple[List[Dict], str]:
     keywords = ["React", "Next.js", "Django", "Full Stack"]
     leads = []
+    status_summary = "200 OK"
     tech_pattern = re.compile(
         r"(developer|engineer|frontend|front-end|backend|back-end|fullstack|full-stack|software|react|django|python|web)",
         re.I,
@@ -90,6 +111,7 @@ def fetch_linkedin_leads() -> List[Dict]:
             r = requests.get(url, headers=HEADERS, proxies=PROXIES or None, timeout=15)
             if r.status_code != 200:
                 print(f"[LinkedIn] Status {r.status_code} for keyword '{kw}'")
+                status_summary = f"{r.status_code} Err"
                 time.sleep(2)
                 continue
 
@@ -114,6 +136,7 @@ def fetch_linkedin_leads() -> List[Dict]:
                     if link_elem and "href" in link_elem.attrs
                     else f"https://www.linkedin.com/jobs/view/{job_id}"
                 )
+
                 posted = "Recent"
                 if time_elem:
                     rel_time = time_elem.get_text(strip=True)
@@ -126,7 +149,6 @@ def fetch_linkedin_leads() -> List[Dict]:
                         posted = dt_attr
 
                 if not job_id:
-                    # fallback ID from URL
                     id_match = re.search(r"-(\d+)$", link)
                     job_id = id_match.group(1) if id_match else str(hash(link))
 
@@ -148,20 +170,22 @@ def fetch_linkedin_leads() -> List[Dict]:
                 })
         except Exception as e:
             print(f"[LinkedIn] Error scraping '{kw}': {e}")
+            status_summary = "Req Failed"
 
-        time.sleep(2.5)  # Be polite to avoid rate limits
+        time.sleep(2.5)
 
-    return leads
+    return leads, status_summary
 
 
-def fetch_reddit_leads() -> List[Dict]:
+def fetch_reddit_leads() -> Tuple[List[Dict], str]:
     url = "https://www.reddit.com/r/forhire/new.rss"
     leads = []
+    status_summary = "200 OK"
     try:
         r = requests.get(url, headers=HEADERS, proxies=PROXIES or None, timeout=12)
         if r.status_code != 200:
             print(f"[Reddit] Status {r.status_code}")
-            return []
+            return [], f"{r.status_code} Err"
 
         try:
             soup = BeautifulSoup(r.text, "xml")
@@ -175,7 +199,6 @@ def fetch_reddit_leads() -> List[Dict]:
             title_elem = entry.find("title")
             link_elem = entry.find("link")
             id_elem = entry.find("id")
-            updated_elem = entry.find("updated")
 
             title = title_elem.get_text(strip=True) if title_elem else ""
             if not re.search(r"\[hiring\]", title, re.I):
@@ -199,18 +222,20 @@ def fetch_reddit_leads() -> List[Dict]:
             })
     except Exception as e:
         print(f"[Reddit] Error: {e}")
+        status_summary = "Req Failed"
 
-    return leads
+    return leads, status_summary
 
 
-def fetch_hn_leads() -> List[Dict]:
+def fetch_hn_leads() -> Tuple[List[Dict], str]:
     query = "(react OR next.js OR django OR python) (contract OR freelance)"
     url = f"https://hn.algolia.com/api/v1/search_by_date?tags=comment&query={urllib.parse.quote(query)}&hitsPerPage=10"
     leads = []
+    status_summary = "200 OK"
     try:
         r = requests.get(url, headers=HEADERS, proxies=PROXIES or None, timeout=10)
         if r.status_code != 200:
-            return []
+            return [], f"{r.status_code} Err"
 
         data = r.json()
         hits = data.get("hits", [])
@@ -219,7 +244,6 @@ def fetch_hn_leads() -> List[Dict]:
             plain = re.sub(r"<[^>]+>", " ", text)
             plain = html.unescape(plain).strip()
 
-            # Skip candidates looking for work
             if re.search(r"seeking\s+work", plain, re.I):
                 continue
 
@@ -241,8 +265,9 @@ def fetch_hn_leads() -> List[Dict]:
             })
     except Exception as e:
         print(f"[HN] Error: {e}")
+        status_summary = "Req Failed"
 
-    return leads
+    return leads, status_summary
 
 
 def send_to_telegram(lead: Dict) -> bool:
@@ -306,6 +331,101 @@ def send_to_telegram(lead: Dict) -> bool:
         return False
 
 
+def update_dashboard(
+    linkedin_status: str,
+    linkedin_count: int,
+    reddit_status: str,
+    reddit_count: int,
+    hn_status: str,
+    hn_count: int,
+    new_leads_count: int,
+    total_seen: int,
+):
+    if not TELEGRAM_BOT_TOKEN:
+        return
+
+    # Tehran timezone: UTC+3:30
+    tz_tehran = timezone(timedelta(hours=3, minutes=30))
+    now_str = datetime.now(tz_tehran).strftime("%H:%M:%S (%d %b)")
+
+    all_healthy = (
+        "200" in linkedin_status and "200" in reddit_status and "200" in hn_status
+    )
+    status_emoji = "🟢" if all_healthy else "🟡"
+    status_text = "All Systems Active" if all_healthy else "Partial Issues"
+
+    dashboard_text = (
+        f"📊 <b>GigRadar Live Dashboard</b>\n"
+        f"{status_emoji} <b>Status:</b> {status_text}\n"
+        f"⏱ <b>Last Check:</b> <code>{now_str} IRST</code>\n"
+        f"⚡️ <b>Interval:</b> Every 5 minutes (GitHub Actions)\n\n"
+        f"📡 <b>Sources Health:</b>\n"
+        f"• 💼 <b>LinkedIn:</b> <code>{linkedin_status}</code> ({linkedin_count} gigs found)\n"
+        f"• 🔴 <b>Reddit:</b> <code>{reddit_status}</code> ({reddit_count} gigs found)\n"
+        f"• 🔶 <b>HackerNews:</b> <code>{hn_status}</code> ({hn_count} gigs found)\n\n"
+        f"🎯 <b>New Leads (This Scan):</b> {new_leads_count}\n"
+        f"📁 <b>Total Database Leads:</b> {total_seen}"
+    )
+
+    state = load_status_state()
+    msg_id = state.get("status_message_id")
+
+    updated = False
+    if msg_id:
+        try:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/editMessageText",
+                json={
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "message_id": msg_id,
+                    "text": dashboard_text,
+                    "parse_mode": "HTML",
+                },
+                proxies=PROXIES or None,
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                updated = True
+            else:
+                print(f"[Dashboard] Edit failed: {resp.status_code} - {resp.text}")
+        except Exception as e:
+            print(f"[Dashboard] Edit error: {e}")
+
+    if not updated:
+        try:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": dashboard_text,
+                    "parse_mode": "HTML",
+                },
+                proxies=PROXIES or None,
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                new_id = resp.json().get("result", {}).get("message_id")
+                state["status_message_id"] = new_id
+                save_status_state(state)
+
+                # Pin the status message silently
+                try:
+                    requests.post(
+                        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/pinChatMessage",
+                        json={
+                            "chat_id": TELEGRAM_CHAT_ID,
+                            "message_id": new_id,
+                            "disable_notification": True,
+                        },
+                        proxies=PROXIES or None,
+                        timeout=10,
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[Dashboard] Send error: {e}")
+
+
 def main():
     print("=== GigRadar Lead Scanner Starting ===")
     seen = load_seen_leads()
@@ -315,20 +435,20 @@ def main():
 
     # 1. Scrape LinkedIn (Primary)
     print("Scraping LinkedIn...")
-    linkedin_leads = fetch_linkedin_leads()
-    print(f"Found {len(linkedin_leads)} matching LinkedIn contract leads.")
+    linkedin_leads, linkedin_status = fetch_linkedin_leads()
+    print(f"Found {len(linkedin_leads)} matching LinkedIn contract leads. Status: {linkedin_status}")
     all_leads.extend(linkedin_leads)
 
     # 2. Scrape Reddit (Instant gigs)
     print("Scraping Reddit r/forhire...")
-    reddit_leads = fetch_reddit_leads()
-    print(f"Found {len(reddit_leads)} Reddit leads.")
+    reddit_leads, reddit_status = fetch_reddit_leads()
+    print(f"Found {len(reddit_leads)} Reddit leads. Status: {reddit_status}")
     all_leads.extend(reddit_leads)
 
     # 3. Scrape Hacker News
     print("Scraping Hacker News...")
-    hn_leads = fetch_hn_leads()
-    print(f"Found {len(hn_leads)} HN leads.")
+    hn_leads, hn_status = fetch_hn_leads()
+    print(f"Found {len(hn_leads)} HN leads. Status: {hn_status}")
     all_leads.extend(hn_leads)
 
     new_count = 0
@@ -342,10 +462,22 @@ def main():
         if success:
             seen[lead_id] = int(time.time())
             new_count += 1
-            time.sleep(1)  # small pause between telegram messages
+            time.sleep(1)
 
     save_seen_leads(seen)
     print(f"=== Scan Finished. {new_count} new leads notified. Total seen: {len(seen)} ===")
+
+    # Update Live Telegram Dashboard
+    update_dashboard(
+        linkedin_status=linkedin_status,
+        linkedin_count=len(linkedin_leads),
+        reddit_status=reddit_status,
+        reddit_count=len(reddit_leads),
+        hn_status=hn_status,
+        hn_count=len(hn_leads),
+        new_leads_count=new_count,
+        total_seen=len(seen),
+    )
 
 
 if __name__ == "__main__":
