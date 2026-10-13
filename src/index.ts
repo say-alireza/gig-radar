@@ -31,6 +31,27 @@ export default {
       });
     }
 
+    if (url.pathname === '/set-webhook') {
+      const webhookUrl = url.origin;
+      const res = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`
+      );
+      const data = await res.json();
+      return new Response(JSON.stringify(data, null, 2), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.pathname === '/webhook-info') {
+      const res = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`
+      );
+      const data = await res.json();
+      return new Response(JSON.stringify(data, null, 2), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     if (request.method === 'POST') {
       try {
         const update: any = await request.json();
