@@ -22,23 +22,33 @@ export async function sendLeadToTelegram(
   }
 
   const inlineKeyboard: any[] = [];
+  const linkRow: any[] = [];
+
   if (lead.url) {
-    inlineKeyboard.push([
-      {
-        text: `🚀 Open on ${lead.source}`,
-        url: lead.url,
-      },
-    ]);
+    linkRow.push({
+      text: `🚀 Open on ${lead.source}`,
+      url: lead.url,
+    });
   }
 
   if (lead.directContact) {
-    inlineKeyboard.push([
-      {
-        text: '📧 Send Email',
-        url: `mailto:${lead.directContact}?subject=${encodeURIComponent('Quick Question - ' + lead.title)}`,
-      },
-    ]);
+    linkRow.push({
+      text: '📧 Send Email',
+      url: `mailto:${lead.directContact}?subject=${encodeURIComponent('Quick Question - ' + lead.title)}`,
+    });
   }
+
+  if (linkRow.length > 0) {
+    inlineKeyboard.push(linkRow);
+  }
+
+  // Button to trigger custom resume generation on demand
+  inlineKeyboard.push([
+    {
+      text: '📝 ساخت رزومه اختصاصی (ATS 100)',
+      callback_data: `tailor:${lead.id.slice(0, 50)}`,
+    },
+  ]);
 
   const payload = {
     chat_id: chatId,
@@ -67,7 +77,81 @@ export async function sendLeadToTelegram(
   }
 }
 
-function escapeHtml(text: string): string {
+export async function sendTelegramMessage(
+  botToken: string,
+  chatId: string | number,
+  text: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error(`[Telegram] Message send error:`, err);
+    return false;
+  }
+}
+
+export async function answerCallbackQuery(
+  botToken: string,
+  callbackQueryId: string,
+  text?: string
+): Promise<void> {
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text,
+      }),
+    });
+  } catch (err) {
+    console.error(`[Telegram] answerCallbackQuery error:`, err);
+  }
+}
+
+export async function sendResumeDocument(
+  botToken: string,
+  chatId: string | number,
+  docBytes: Uint8Array,
+  filename: string,
+  caption: string
+): Promise<boolean> {
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  const fileBlob = new Blob([docBytes], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  form.append('document', fileBlob, filename);
+  form.append('caption', caption);
+  form.append('parse_mode', 'HTML');
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[Telegram] sendDocument failed: ${res.status} - ${err}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[Telegram] sendDocument network error:`, err);
+    return false;
+  }
+}
+
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

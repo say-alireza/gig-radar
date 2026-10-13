@@ -1,6 +1,14 @@
-import { fetchLinkedInContractJobs, GigLead } from './sources/linkedin';
+import { fetchLinkedInContractJobs, GigLead, fetchLinkedInJobDescription } from './sources/linkedin';
 import { fetchHNContractLeads } from './sources/hackernews';
-import { sendLeadToTelegram } from './telegram';
+import {
+  sendLeadToTelegram,
+  sendTelegramMessage,
+  answerCallbackQuery,
+  sendResumeDocument,
+} from './telegram';
+import master from './resume/master.json';
+import { tailorResume } from './resume/tailor';
+import { buildDocx, resumeFilename } from './resume/docx';
 
 export interface Env {
   GIG_KV: KVNamespace;
@@ -26,6 +34,29 @@ export default {
     if (request.method === 'POST') {
       try {
         const update: any = await request.json();
+
+        // 1. Handle Callback Query (e.g. click "📝 ساخت رزومه اختصاصی (ATS 100)")
+        if (update?.callback_query) {
+          const cb = update.callback_query;
+          const data: string = cb.data || '';
+          const chatId = cb.message?.chat?.id;
+
+          if (data.startsWith('tailor:') && chatId) {
+            const leadId = data.replace('tailor:', '');
+            // Immediate feedback popup to Telegram
+            await answerCallbackQuery(
+              env.TELEGRAM_BOT_TOKEN,
+              cb.id,
+              '⏳ در حال ساخت رزومه بهینه‌شده...'
+            );
+
+            // Execute in background so the webhook responds immediately
+            ctx.waitUntil(handleTailorRequest(env, chatId, leadId));
+            return new Response('OK');
+          }
+        }
+
+        // 2. Handle Text Commands
         const chatId = update?.message?.chat?.id;
         const text = update?.message?.text;
 
@@ -34,7 +65,7 @@ export default {
             await sendTelegramMessage(
               env.TELEGRAM_BOT_TOKEN,
               chatId,
-              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn for <b>Contract & Freelance Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\nPure full-time employment roles are strictly filtered out.\nSend /scan to check now!`
+              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn & HackerNews for <b>Contract & Freelance Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\n💡 هر پروژه‌ای پیدا شود، دکمه <b>📝 ساخت رزومه اختصاصی</b> دارد تا با تایید شما رزومه‌ای با نمره ATS 100 بسازد.\n\nارسال /scan برای اسکن دستی.`
             );
           } else if (text.startsWith('/scan')) {
             await sendTelegramMessage(
@@ -66,6 +97,99 @@ export default {
   },
 };
 
+async function handleTailorRequest(env: Env, chatId: string | number, leadId: string) {
+  try {
+    // 1. Send status notification
+    await sendTelegramMessage(
+      env.TELEGRAM_BOT_TOKEN,
+      chatId,
+      '⏳ <b>در حال تحلیل موقعیت شغلی و استخراج کلمات کلیدی ATS...</b>'
+    );
+
+    // 2. Fetch lead info from KV
+    let lead: GigLead | null = null;
+    const raw = await env.GIG_KV.get(leadId);
+    if (raw) {
+      try {
+        lead = JSON.parse(raw);
+      } catch {}
+    }
+
+    // 3. Obtain JD text
+    let jdText = '';
+    let roleTitle = 'Software Engineer';
+    let companyName = 'Contract';
+
+    if (lead) {
+      roleTitle = lead.title;
+      companyName = lead.company;
+      jdText = lead.snippet || `${lead.title} at ${lead.company}`;
+
+      // If LinkedIn, fetch full description
+      if (lead.source === 'LinkedIn' && lead.id.startsWith('linkedin:')) {
+        const jobId = lead.id.replace('linkedin:', '');
+        const fullDesc = await fetchLinkedInJobDescription(jobId);
+        if (fullDesc && fullDesc.length > 50) {
+          jdText = `${lead.title}\n${lead.company}\n${fullDesc}`;
+        }
+      }
+    } else {
+      if (leadId.startsWith('linkedin:')) {
+        const jobId = leadId.replace('linkedin:', '');
+        const fullDesc = await fetchLinkedInJobDescription(jobId);
+        if (fullDesc) jdText = fullDesc;
+      }
+      if (!jdText) {
+        jdText = 'Full-Stack Developer Contract (React, Next.js, Django, TypeScript, Tailwind CSS, REST APIs)';
+      }
+    }
+
+    // 4. Tailor Resume deterministically (Zero-Invention ATS 100)
+    const result = await tailorResume({
+      master,
+      jd: jdText,
+    });
+
+    // 5. Build DOCX
+    const docxBytes = buildDocx(result.resume);
+    const filename = resumeFilename(result.resume.header.name, companyName);
+
+    // 6. Report summary
+    const rep = result.report;
+    const topKeywords = rep.matched.slice(0, 8).map((k) => k.display).join(', ');
+    const gaps = rep.gaps.length > 0
+      ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
+      : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
+
+    const caption = [
+      `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
+      ``,
+      `💼 <b>پوزیشن:</b> ${roleTitle} (${companyName})`,
+      `📊 <b>نمره تطابق ATS:</b> <code>${rep.score}/100</code>`,
+      `✅ <b>کلمات کلیدی منطبق (${rep.matched.length}):</b> ${topKeywords}`,
+      `⚠️ <b>گپ‌های مهارتی:</b> ${gaps}`,
+      ``,
+      `📄 <i>فایل ورد تک‌ستونه، استاندارد و بدون جدول جهت عبور موفق از فیلتر اولیه ATS.</i>`,
+    ].join('\n');
+
+    // 7. Deliver DOCX directly to Telegram
+    await sendResumeDocument(
+      env.TELEGRAM_BOT_TOKEN,
+      chatId,
+      docxBytes,
+      filename,
+      caption
+    );
+  } catch (err: any) {
+    console.error('Tailor request failed:', err);
+    await sendTelegramMessage(
+      env.TELEGRAM_BOT_TOKEN,
+      chatId,
+      `❌ خطا در ساخت رزومه: ${err?.message || String(err)}`
+    );
+  }
+}
+
 async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
   const keywords = overrideKw
     ? [overrideKw]
@@ -79,8 +203,8 @@ async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
   };
 
   const allLeads: GigLead[] = [];
-
   const debugErrors: any[] = [];
+
   for (const kw of keywords) {
     const res = await fetchLinkedInContractJobs(kw);
     if (res.leads.length > 0) {
@@ -115,14 +239,11 @@ async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
       break;
     }
 
-    // Generate tailored pitch with Workers AI
+    // Generate tailored pitch with Workers AI if available
     let pitch: string | undefined = undefined;
     if (env.AI) {
       try {
-        const aiPrompt = `You are Alireza, a full-stack developer (React, Next.js, Django, Tailwind). Write a 2-sentence direct proposal pitch to the hiring team for this contract gig:
-Role: ${lead.title} at ${lead.company}
-Snippet: ${lead.snippet}
-Keep it confident, highlight relevant React/Django experience, zero fluff.`;
+        const aiPrompt = `You are Alireza, a full-stack developer (React, Next.js, Django, Tailwind). Write a 2-sentence direct proposal pitch to the hiring team for this contract gig:\nRole: ${lead.title} at ${lead.company}\nSnippet: ${lead.snippet}\nKeep it confident, highlight relevant React/Django experience, zero fluff.`;
 
         const response: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
           messages: [{ role: 'user', content: aiPrompt }],
@@ -140,26 +261,11 @@ Keep it confident, highlight relevant React/Django experience, zero fluff.`;
       if (sent) {
         stats.sentToTelegram++;
         sentCount++;
-        await env.GIG_KV.put(lead.id, '1', { expirationTtl: 60 * 60 * 24 * 14 });
+        // Store the lead object in KV for future on-demand resume generation
+        await env.GIG_KV.put(lead.id, JSON.stringify(lead), { expirationTtl: 60 * 60 * 24 * 14 });
       }
     }
   }
 
   return { ...stats, debugErrors };
-}
-
-async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
-  try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: 'HTML',
-      }),
-    });
-  } catch (err) {
-    console.error('Send error:', err);
-  }
 }

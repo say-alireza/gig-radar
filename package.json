@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "npx wrangler dev --port 8000 --ip 127.0.0.1",
     "deploy": "npx wrangler deploy",
-    "build": "npx wrangler types"
+    "build": "npx wrangler types",
+    "check:ats": "npx tsx scripts/ats-check.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241022.0",

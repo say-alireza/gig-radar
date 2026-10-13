@@ -1,0 +1,199 @@
+{
+  "meta": {
+    "version": 1,
+    "language": "en",
+    "last_updated": "2026-10-13",
+    "source": "nextjs-resume/public/AlirezaRahimpanah-main.pdf + src/data/data.tsx",
+    "rules": "The model may ONLY select, reorder, and lightly rephrase the bullets/fields below. It must NOT invent companies, titles, dates, metrics, or technologies that are not present in this file."
+  },
+  "identity": {
+    "full_name": "Alireza Rahimpanah",
+    "name_variants_seen": ["Alireza Rahimapanah (typo in PDF)", "Alireza Rahimpanah (canonical)"],
+    "headline": "Full-Stack Software Engineer | React / Next.js | TypeScript | Python (Django)",
+    "location": "Remote (Worldwide / Flexible Timezone)",
+    "availability": "Available for Freelance & Contracts",
+    "experience_years": "2+",
+    "links": {
+      "email": "a.rahimpanah71@gmail.com",
+      "website": "https://cv.alirezarp.ir",
+      "github": "https://github.com/say-alireza",
+      "linkedin": "https://linkedin.com/in/alireza-rahimpanah-b7010a301",
+      "telegram": "https://t.me/say_alirexa"
+    },
+    "unresolved": [
+      "linkedin slug: PDF shows alireza-rahimpanah, site shows alireza-rahimpanah-b7010a301",
+      "intern employer: PDF says ACECR, site says Jahad-e Daneshgahi Birjand"
+    ]
+  },
+  "summary_variants": [
+    {
+      "id": "sum_default",
+      "text": "Full-Stack Software Engineer with 2+ years of hands-on experience building performant web applications, distributed edge systems, and responsive frontends. Creator and lead engineer of the EPD community platform (Next.js, Cloudflare Pages & D1 edge SQLite, Telegram Bot integration), serving weekly event operations with sub-50ms latency. Proficient in TypeScript and Python across modern frontend frameworks (React, Next.js, Vite, Tailwind CSS) and backend services (Django, RESTful APIs). Pursuing a B.S. in Computer Engineering at University of Birjand."
+    },
+    {
+      "id": "sum_frontend",
+      "text": "Frontend-focused Full-Stack Engineer with 2+ years building responsive, accessible React and Next.js interfaces. Strong on TypeScript, Tailwind CSS, state management, and Core Web Vitals performance (98+ scores delivered). Comfortable across the stack with Python/Django REST APIs and serverless edge deployment on Cloudflare."
+    },
+    {
+      "id": "sum_backend",
+      "text": "Backend-leaning Full-Stack Engineer with 2+ years building RESTful services and data-driven dashboards. Experienced in Python, Django REST Framework, PostgreSQL, and SQLite, plus serverless edge data layers (Cloudflare D1, KV). Ships clean, modular code with CI/CD and Git-based workflows."
+    },
+    {
+      "id": "sum_bot",
+      "text": "Full-Stack Engineer specializing in web platforms with deep Telegram Bot automation and payment/webhook integrations. 2+ years delivering production systems on Next.js, Cloudflare Workers/Pages, D1, and Python/Django. Owns features end-to-end, from schema design to bot UX."
+    }
+  ],
+  "skills": {
+    "languages": ["TypeScript", "JavaScript (ES6+)", "Python", "SQL", "HTML5", "CSS3 / SASS"],
+    "frontend": ["React 18/19", "Next.js (App & Pages Router)", "Vite", "Tailwind CSS", "Chakra UI", "shadcn/ui", "Context API", "Redux Toolkit", "Framer Motion", "SASS"],
+    "backend": ["Python", "Django", "Django REST Framework", "Node.js", "RESTful APIs", "WebSockets"],
+    "data": ["Cloudflare D1 (SQLite)", "PostgreSQL", "SQLite"],
+    "cloud_devops": ["Cloudflare Pages", "Cloudflare Workers", "Cloudflare D1", "Cloudflare KV", "Vercel", "Docker", "Git", "GitHub Actions", "CI/CD", "Edge Compute"],
+    "tools": ["Git/GitHub", "Postman", "Linux/Bash", "Agile/Scrum", "Web Performance Optimization", "Core Web Vitals"]
+  },
+  "experience": [
+    {
+      "id": "exp_epd",
+      "title": "Full-Stack Software Engineer",
+      "company": "EPD Community",
+      "location": "Remote",
+      "start": "2024",
+      "end": "Present",
+      "stack": ["Next.js", "Cloudflare Pages", "Cloudflare D1", "SQLite", "Tailwind CSS", "Telegram Bot API", "Edge Functions"],
+      "bullets": [
+        { "id": "epd_b1", "text": "Architected and deployed the production web platform (epdcommunity.ir), delivering sub-50ms response times globally by utilizing Cloudflare Pages and distributed D1 edge SQLite.", "tags": ["architecture", "performance", "edge"] },
+        { "id": "epd_b2", "text": "Engineered serverless backend endpoints handling registration workflows, event ticketing, and payment callback webhooks with strict transactional consistency.", "tags": ["backend", "payments", "serverless"] },
+        { "id": "epd_b3", "text": "Implemented bidirectional Telegram Bot automation integrating webhook verification for instant attendee check-in and automated event ticket dispatches.", "tags": ["bot", "automation", "integration"] },
+        { "id": "epd_b4", "text": "Built accessible, responsive UI with custom typography and state management, achieving 98+ scores across Core Web Vitals performance benchmarks.", "tags": ["frontend", "accessibility", "performance"] }
+      ]
+    },
+    {
+      "id": "exp_pims",
+      "title": "Full-Stack Engineer",
+      "company": "Pipeline Risk Assessment Systems",
+      "location": "Remote",
+      "start": "2024",
+      "end": "2025",
+      "stack": ["Next.js", "TypeScript", "Python", "Django", "PostgreSQL", "Tailwind CSS", "RESTful APIs"],
+      "bullets": [
+        { "id": "pims_b1", "text": "Developed an interactive enterprise engineering dashboard for utility infrastructure risk evaluation, translating multi-factor mathematical models into real-time visual charts and data grids.", "tags": ["dashboard", "data-viz", "domain"] },
+        { "id": "pims_b2", "text": "Engineered modular Next.js data tables, dynamic chart filters, and computation grids handling telemetry records with zero client-side latency.", "tags": ["frontend", "performance", "tables"] },
+        { "id": "pims_b3", "text": "Built performant RESTful API endpoints using Django REST Framework and PostgreSQL, optimizing database queries for multi-variable risk calculations.", "tags": ["backend", "api", "database"] }
+      ]
+    },
+    {
+      "id": "exp_intern",
+      "title": "Frontend & Web Development Intern",
+      "company": "ACECR (Academic Center for Education & Research) / Jahad-e Daneshgahi, Birjand",
+      "company_note": "PDF says ACECR; site says Jahad-e Daneshgahi Birjand. Supervisor: Eng. Mohajer (Head of IT).",
+      "location": "Remote / Birjand",
+      "start": "Dec 2023",
+      "end": "Aug 2024",
+      "stack": ["React", "JavaScript", "Bootstrap", "REST APIs", "Git", "Postman"],
+      "bullets": [
+        { "id": "int_b1", "text": "Built responsive user interfaces and interactive web components, resolving cross-browser inconsistencies and enhancing mobile UX for educational portals.", "tags": ["frontend", "responsive", "qa"] },
+        { "id": "int_b2", "text": "Integrated RESTful endpoints via Axios with defensive error boundaries, loading skeletons, and efficient state synchronization.", "tags": ["integration", "frontend"] },
+        { "id": "int_b3", "text": "Participated in agile sprints, code reviews, and Git/GitHub version control workflows.", "tags": ["process", "teamwork"] }
+      ]
+    },
+    {
+      "id": "exp_freelance",
+      "title": "Freelance Full-Stack Developer",
+      "company": "Self-employed",
+      "location": "Remote",
+      "start": "2023",
+      "end": "Present",
+      "stack": ["Django", "React", "Next.js"],
+      "bullets": [
+        { "id": "free_b1", "text": "Building custom web platforms, business dashboards, internal management tools, and API integrations for clients using Django, React, and Next.js.", "tags": ["freelance", "fullstack"] }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj_gamehub",
+      "name": "Game Hub — Video Game Discovery Web Application",
+      "year": "2024 - 2025",
+      "url": "https://github.com/say-alireza/gamehub-react",
+      "stack": ["React 19", "TypeScript", "Vite", "Chakra UI", "Axios", "Framer Motion", "RAWG REST API"],
+      "bullets": [
+        { "id": "gh_b1", "text": "Engineered a responsive game catalog application consuming the RAWG REST API with multi-criteria filtering by genre, platform, and critic scores.", "tags": ["frontend", "api"] },
+        { "id": "gh_b2", "text": "Built generic data-fetching custom hooks (useData) with request cancellation and defensive error handling, eliminating redundant re-renders.", "tags": ["architecture", "performance"] },
+        { "id": "gh_b3", "text": "Implemented skeleton loading states, dark/light theme switching, and smooth animations using Chakra UI and Framer Motion.", "tags": ["ux", "animation"] }
+      ]
+    },
+    {
+      "id": "proj_tradingbot",
+      "name": "Algorithmic Trading Bot Management Dashboard",
+      "year": "2024",
+      "url": "https://github.com/say-alireza/trade-bot-pannel-front-end",
+      "stack": ["Django", "Python", "Bootstrap 5", "HTML5/CSS3", "RESTful APIs", "Real-Time Events"],
+      "bullets": [
+        { "id": "tb_b1", "text": "Built a multi-view management dashboard for automated cryptocurrency trading algorithms, enabling live monitoring of strategy health and trade executions.", "tags": ["dashboard", "fintech"] },
+        { "id": "tb_b2", "text": "Designed real-time event logs, system parameter configuration forms, and operational alert views with input sanitization and error feedback.", "tags": ["backend", "realtime"] }
+      ]
+    },
+    {
+      "id": "proj_epd",
+      "name": "EPD Community Platform",
+      "year": "2024 - Present",
+      "url": "https://epdcommunity.ir/",
+      "stack": ["Next.js", "Cloudflare Pages", "Cloudflare D1", "Tailwind CSS", "Telegram Bot API"],
+      "bullets": [
+        { "id": "pe_b1", "text": "Weekly English discussion club web platform featuring session booking, seat management, and real-time Telegram integration.", "tags": ["fullstack", "production"] }
+      ]
+    },
+    {
+      "id": "proj_arvingaran",
+      "name": "Arvingaran Files",
+      "year": "2024",
+      "url": "http://files.arvingaran.com/",
+      "stack": ["Web", "E-commerce"],
+      "bullets": [
+        { "id": "ar_b1", "text": "Digital file store platform for browsing, purchasing, and downloading digital goods and resources.", "tags": ["ecommerce", "client"] }
+      ]
+    },
+    {
+      "id": "proj_lanchat",
+      "name": "LAN Chat Application",
+      "year": "2024",
+      "url": "https://github.com/say-alireza/local-chat-app",
+      "stack": ["Next.js", "Django", "WebSockets"],
+      "bullets": [
+        { "id": "lc_b1", "text": "Open-source real-time local chat app built with Next.js, Django, and WebSockets.", "tags": ["realtime", "opensource"] }
+      ]
+    },
+    {
+      "id": "proj_wee",
+      "name": "Wee Restaurant Website",
+      "year": "2024",
+      "url": "https://say-alireza.github.io/Wee/",
+      "stack": ["Web", "Client Work"],
+      "bullets": [
+        { "id": "we_b1", "text": "Custom restaurant website built for a client.", "tags": ["client", "frontend"] }
+      ]
+    },
+    {
+      "id": "proj_persiangifs",
+      "name": "Persian GIF Bot (@persiangifs_bot)",
+      "year": "2024",
+      "url": "https://t.me/persiangifs_bot",
+      "stack": ["Telegram Bot API", "Python"],
+      "bullets": [
+        { "id": "pg_b1", "text": "Inline Persian GIF search Telegram bot for fast, categorized search across chats.", "tags": ["bot", "product"] }
+      ]
+    }
+  ],
+  "education": [
+    {
+      "id": "edu_bsc",
+      "degree": "Bachelor of Science in Computer Engineering",
+      "school": "University of Birjand",
+      "start": "2023",
+      "end": "2027 (Expected)",
+      "coursework": ["Data Structures & Algorithms", "Database Design", "Operating Systems", "Computer Networks", "Software Engineering"]
+    }
+  ],
+  "languages_spoken": ["Persian (native)", "English (professional working proficiency)"],
+  "interests": ["Boxing", "Fitness", "Cinema", "Music"]
+}

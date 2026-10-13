@@ -73,7 +73,7 @@ export async function fetchLinkedInContractJobs(keyword: string): Promise<{ stat
   }
 }
 
-function cleanText(raw: string): string {
+export function cleanText(raw: string): string {
   return raw
     .replace(/<[^>]+>/g, '')
     .replace(/&amp;/g, '&')
@@ -82,4 +82,26 @@ function cleanText(raw: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
     .trim();
+}
+
+export async function fetchLinkedInJobDescription(jobId: string): Promise<string> {
+  const url = `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${jobId}`;
+  const headers = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  };
+  try {
+    const res = await fetch(url, { headers });
+    if (!res.ok) return '';
+    const html = await res.text();
+    const match = html.match(/class=\"description__text[^\"]*\">([\s\S]*?)<\/div>/i);
+    if (match) {
+      return cleanText(match[1]);
+    }
+  } catch (err) {
+    console.error('fetchLinkedInJobDescription error:', err);
+  }
+  return '';
 }
