@@ -5,6 +5,7 @@ import {
   sendTelegramMessage,
   answerCallbackQuery,
   sendResumeDocument,
+  updateTelegramDashboard,
 } from './telegram';
 import master from './resume/master.json';
 import { tailorResume } from './resume/tailor';
@@ -26,6 +27,21 @@ export default {
       const force = url.searchParams.get('force') === 'true';
       const customKw = url.searchParams.get('kw');
       const result = await scanAndNotify(env, force, customKw || undefined);
+      return new Response(JSON.stringify(result, null, 2), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.pathname === '/status') {
+      const targetChatId = env.TELEGRAM_CHAT_ID || '96092687';
+      const result = await updateTelegramDashboard(env.TELEGRAM_BOT_TOKEN, targetChatId, env.GIG_KV, {
+        sources: {
+          LinkedIn: { count: 0, status: '200 OK' },
+          HackerNews: { count: 0, status: '200 OK' },
+        },
+        newLeads: 0,
+        totalSeen: 0,
+      });
       return new Response(JSON.stringify(result, null, 2), {
         headers: { 'Content-Type': 'application/json' },
       });
@@ -95,6 +111,18 @@ export default {
               `🔍 Scanning LinkedIn for fresh contract & freelance gigs...`
             );
             ctx.waitUntil(scanAndNotify(env, true));
+          } else if (text.startsWith('/status')) {
+            const targetChatId = env.TELEGRAM_CHAT_ID || String(chatId);
+            ctx.waitUntil(
+              updateTelegramDashboard(env.TELEGRAM_BOT_TOKEN, targetChatId, env.GIG_KV, {
+                sources: {
+                  LinkedIn: { count: 0, status: '200 OK' },
+                  HackerNews: { count: 0, status: '200 OK' },
+                },
+                newLeads: 0,
+                totalSeen: 0,
+              })
+            );
           }
         }
       } catch (err) {
@@ -286,6 +314,29 @@ async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
         await env.GIG_KV.put(lead.id, JSON.stringify(lead), { expirationTtl: 60 * 60 * 24 * 14 });
       }
     }
+  }
+
+  // Update live status dashboard on Telegram
+  const targetChatId = env.TELEGRAM_CHAT_ID || '96092687';
+  if (env.TELEGRAM_BOT_TOKEN) {
+    const liErr = debugErrors.find((e) => e.kw === 'React');
+    const liStatus = liErr ? `${liErr.status || 'Err'}` : '200 OK';
+    const sourceStats: Record<string, { count: number; status: string }> = {
+      LinkedIn: {
+        count: stats.sources['LinkedIn'] || 0,
+        status: liStatus,
+      },
+      HackerNews: {
+        count: stats.sources['HackerNews'] || 0,
+        status: '200 OK',
+      },
+    };
+
+    await updateTelegramDashboard(env.TELEGRAM_BOT_TOKEN, targetChatId, env.GIG_KV, {
+      sources: sourceStats,
+      newLeads: stats.sentToTelegram,
+      totalSeen: stats.checked,
+    });
   }
 
   return { ...stats, debugErrors };

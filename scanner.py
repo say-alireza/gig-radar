@@ -307,6 +307,13 @@ def send_to_telegram(lead: Dict) -> bool:
             }
         ])
 
+    inline_keyboard.append([
+        {
+            "text": "📝 ساخت رزومه اختصاصی (ATS 100)",
+            "callback_data": f"tailor:{lead['id'][:50]}",
+        }
+    ])
+
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": msg,

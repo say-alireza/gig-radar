@@ -11,6 +11,7 @@ export async function sendLeadToTelegram(
   let message = `${sourceEmoji} <b>New Lead: ${escapeHtml(lead.title)}</b>\n\n`;
   message += `🏢 <b>Company:</b> ${escapeHtml(lead.company)}\n`;
   message += `📍 <b>Location:</b> ${escapeHtml(lead.location)}\n`;
+  message += `⏱ <b>Published:</b> <code>${escapeHtml(lead.posted || 'Recent')}</code>\n`;
   message += `🏷 <b>Source:</b> ${lead.source} (Contract / Remote)\n`;
 
   if (lead.directContact) {
@@ -156,4 +157,107 @@ export function escapeHtml(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+export async function updateTelegramDashboard(
+  botToken: string,
+  chatId: string,
+  kv: KVNamespace,
+  stats: {
+    sources: Record<string, { count: number; status: string }>;
+    newLeads: number;
+    totalSeen: number;
+  }
+): Promise<{ success: boolean; messageId?: number; error?: string }> {
+  const now = new Date();
+  const nowStr = now.toLocaleString('en-GB', {
+    timeZone: 'Asia/Tehran',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    day: '2-digit',
+    month: 'short',
+  });
+
+  const liStatus = stats.sources.LinkedIn?.status || '200 OK';
+  const liCount = stats.sources.LinkedIn?.count || 0;
+  const hnStatus = stats.sources.HackerNews?.status || '200 OK';
+  const hnCount = stats.sources.HackerNews?.count || 0;
+
+  const allHealthy = !liStatus.includes('Err') && !hnStatus.includes('Err');
+  const statusEmoji = allHealthy ? '🟢' : '🟡';
+  const statusText = allHealthy ? 'All Systems Active' : 'Partial Issues';
+
+  const dashboardText = [
+    `📊 <b>GigRadar Live Dashboard</b>`,
+    `${statusEmoji} <b>Status:</b> ${statusText}`,
+    `⏱ <b>Last Check:</b> <code>${nowStr} IRST</code>`,
+    `⚡️ <b>Interval:</b> Scheduled (Cloudflare Edge)`,
+    ``,
+    `📡 <b>Sources Health:</b>`,
+    `• 💼 <b>LinkedIn:</b> <code>${liStatus}</code> (${liCount} gigs found)`,
+    `• 🔶 <b>HackerNews:</b> <code>${hnStatus}</code> (${hnCount} gigs found)`,
+    ``,
+    `🎯 <b>New Leads (This Scan):</b> ${stats.newLeads}`,
+    `📁 <b>Total Database Leads:</b> ${stats.totalSeen}`,
+  ].join('\n');
+
+  const msgId = await kv.get('status_message_id');
+  let updated = false;
+
+  if (msgId) {
+    try {
+      const resp = await fetch(`https://api.telegram.org/bot${botToken}/editMessageText`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: parseInt(msgId, 10),
+          text: dashboardText,
+          parse_mode: 'HTML',
+        }),
+      });
+      if (resp.ok) {
+        return { success: true, messageId: parseInt(msgId, 10) };
+      }
+    } catch (e: any) {
+      console.warn('[Dashboard] Edit error:', e);
+    }
+  }
+
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: dashboardText,
+        parse_mode: 'HTML',
+      }),
+    });
+    const text = await resp.text();
+    if (resp.ok) {
+      const data: any = JSON.parse(text);
+      const newId = data?.result?.message_id;
+      if (newId) {
+        await kv.put('status_message_id', String(newId));
+        await fetch(`https://api.telegram.org/bot${botToken}/pinChatMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            message_id: newId,
+            disable_notification: true,
+          }),
+        });
+        return { success: true, messageId: newId };
+      }
+      return { success: true };
+    } else {
+      return { success: false, error: `${resp.status}: ${text}` };
+    }
+  } catch (e: any) {
+    return { success: false, error: e?.message || String(e) };
+  }
 }

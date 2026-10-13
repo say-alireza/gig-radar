@@ -42,13 +42,27 @@ export async function fetchLinkedInContractJobs(keyword: string): Promise<{ stat
       const companyMatch = item.match(/<h4[^>]*class="[^"]*base-search-card__subtitle[^"]*"[^>]*>[\s\S]*?<a[^>]*>\s*([\s\S]*?)\s*<\/a>|<h4[^>]*class="[^"]*base-search-card__subtitle[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/h4>/i);
       const locationMatch = item.match(/<span[^>]*class="[^"]*job-search-card__location[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/span>/i);
       const linkMatch = item.match(/<a[^>]*class="[^"]*base-card__full-link[^"]*"[^>]*href="([^"]+)"/i);
-      const timeMatch = item.match(/<time[^>]*>\s*([\s\S]*?)\s*<\/time>/i);
+      const timeMatch = item.match(/<time\b([^>]*)>([\s\S]*?)<\/time>/i);
 
       const title = titleMatch ? cleanText(titleMatch[1]) : 'Developer';
       const company = companyMatch ? cleanText(companyMatch[1] || companyMatch[2] || 'Company') : 'Company';
       const location = locationMatch ? cleanText(locationMatch[1]) : 'Remote';
       const cleanUrl = linkMatch ? linkMatch[1].split('?')[0] : `https://www.linkedin.com/jobs/view/${jobId}`;
-      const posted = timeMatch ? cleanText(timeMatch[1]) : 'Recent';
+
+      let posted = 'Recent';
+      if (timeMatch) {
+        const attrs = timeMatch[1];
+        const inner = cleanText(timeMatch[2]);
+        const dtMatch = attrs.match(/datetime="([^"]+)"/i);
+        const dtAttr = dtMatch ? dtMatch[1] : '';
+        if (inner && dtAttr) {
+          posted = `${inner} (${dtAttr})`;
+        } else if (inner) {
+          posted = inner;
+        } else if (dtAttr) {
+          posted = dtAttr;
+        }
+      }
 
       const isTech = /developer|engineer|frontend|front-end|backend|back-end|fullstack|full-stack|software|react|django|python|web|architect/.test(
         title.toLowerCase()
