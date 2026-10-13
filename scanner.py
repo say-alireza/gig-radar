@@ -154,7 +154,10 @@ def fetch_reddit_leads() -> List[Dict]:
             print(f"[Reddit] Status {r.status_code}")
             return []
 
-        soup = BeautifulSoup(r.text, "xml")
+        try:
+            soup = BeautifulSoup(r.text, "xml")
+        except Exception:
+            soup = BeautifulSoup(r.text, "html.parser")
         entries = soup.find_all("entry")
 
         tech_kw = re.compile(r"(react|next\.?js|django|python|fullstack|full-stack|frontend|front-end|web developer)", re.I)
