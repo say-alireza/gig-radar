@@ -1,0 +1,16 @@
+{
+  "name": "gig-radar",
+  "version": "1.0.0",
+  "description": "Automated freelance & contract job hunter with LinkedIn priority and Telegram alerts",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "npx wrangler dev --port 8000 --ip 127.0.0.1",
+    "deploy": "npx wrangler deploy",
+    "build": "npx wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241022.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.80.0"
+  }
+}

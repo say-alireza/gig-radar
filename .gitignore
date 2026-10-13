@@ -1,0 +1,22 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.pyc
+
+# Secrets & environment
+.env
+*.env
+.dev.vars
+*.token
+
+# Wrangler & Node
+node_modules/
+.wrangler/
+dist/
+
+# Logs
+*.log
+npm-debug.log*

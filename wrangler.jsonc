@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gig-radar",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "GIG_KV",
+      "id": "d4fe95dcc78248378ef9718f116a0f20"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "TELEGRAM_CHAT_ID": "96092687",
+    "SEARCH_KEYWORDS": "React,Next.js,Django,Full Stack"
+  }
+}
