@@ -215,7 +215,7 @@ def fetch_hn_leads() -> List[Dict]:
                 continue
 
             email_match = re.search(r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}", plain)
-            direct_contact = email_match.group(0) if email_match else None
+            direct_contact = email_match.group(0).strip().rstrip(".)]:;'\"") if email_match else None
 
             first_line = plain.split("\n")[0][:100] if plain else "HN Freelance Lead"
 
