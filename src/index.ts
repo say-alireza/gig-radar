@@ -8,7 +8,7 @@ import {
   updateTelegramDashboard,
 } from './telegram';
 import master from './resume/master.json';
-import { tailorResume } from './resume/tailor';
+import { aiTailorResume } from './resume/ai-tailor';
 import { buildDocx, resumeFilename } from './resume/docx';
 
 export interface Env {
@@ -72,7 +72,7 @@ export default {
       try {
         const update: any = await request.json();
 
-        // 1. Handle Callback Query (e.g. click "📝 ساخت رزومه اختصاصی (ATS 100)")
+        // 1. Handle Callback Query (click "📝 ساخت رزومه اختصاصی (ATS 100)")
         if (update?.callback_query) {
           const cb = update.callback_query;
           const data: string = cb.data || '';
@@ -84,7 +84,7 @@ export default {
             await answerCallbackQuery(
               env.TELEGRAM_BOT_TOKEN,
               cb.id,
-              '⏳ در حال ساخت رزومه بهینه‌شده...'
+              '⏳ در حال ساخت رزومه بهینه‌شده با هوش مصنوعی...'
             );
 
             // Execute in background so the webhook responds immediately
@@ -93,7 +93,7 @@ export default {
           }
         }
 
-        // 2. Handle Text Commands
+        // 2. Handle Text Messages
         const chatId = update?.message?.chat?.id;
         const text = update?.message?.text;
 
@@ -102,7 +102,7 @@ export default {
             await sendTelegramMessage(
               env.TELEGRAM_BOT_TOKEN,
               chatId,
-              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn & HackerNews for <b>Contract & Freelance Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\n💡 هر پروژه‌ای پیدا شود، دکمه <b>📝 ساخت رزومه اختصاصی</b> دارد تا با تایید شما رزومه‌ای با نمره ATS 100 بسازد.\n\nارسال /scan برای اسکن دستی.`
+              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn & HackerNews for <b>Contract & Freelance Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\n💡 <b>دو راه برای ساخت رزومه اختصاصی:</b>\n1. روی دکمه <b>📝 ساخت رزومه اختصاصی</b> زیر هر آگهی کلیک کنید.\n2. یا <b>متن کامل هر شرح شغل (JD)</b> را مستقیماً همینجا بفرستید تا هوش مصنوعی فوراً رزومه متناسب با آن را بازنویسی کند و فایل Word (.docx) تحویل دهد.\n\n/scan برای اسکن دستی | /status برای مشاهده وضعیت.`
             );
           } else if (text.startsWith('/scan')) {
             await sendTelegramMessage(
@@ -123,6 +123,22 @@ export default {
                 totalSeen: 0,
               })
             );
+          } else {
+            // Direct Job Description text sent by the user!
+            if (text.trim().length >= 30) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                '⏳ <b>متن شرح شغل دریافت شد. در حال تحلیل نیازمندی‌ها و بازنویسی رزومه با هوش مصنوعی...</b>'
+              );
+              ctx.waitUntil(handleDirectJdRequest(env, chatId, text.trim()));
+            } else {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                'متن ارسالی خیلی کوتاه است. لطفاً متن کامل شرح شغل (Job Description) را بفرستید تا رزومه متناسب با آن بازنویسی شود.'
+              );
+            }
           }
         }
       } catch (err) {
@@ -135,7 +151,7 @@ export default {
       JSON.stringify({
         status: 'online',
         service: 'gig-radar',
-        usage: 'Send GET /trigger?force=true or send /scan in Telegram.',
+        usage: 'Send GET /trigger?force=true or send /scan or paste JD in Telegram.',
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );
@@ -146,13 +162,66 @@ export default {
   },
 };
 
+/** Handles direct text sent by the user (pasted Job Description). */
+async function handleDirectJdRequest(env: Env, chatId: string | number, jdText: string) {
+  try {
+    // 1. Tailor Resume using Cloudflare Workers AI
+    const result = await aiTailorResume(env.AI, master, jdText);
+
+    // 2. Build DOCX
+    const docxBytes = buildDocx(result.resume);
+    const targetTitle = result.resume.header.headline || 'Custom_Role';
+    const filename = resumeFilename(result.resume.header.name, targetTitle.slice(0, 25));
+
+    // 3. Format Report & Stats
+    const rep = result.report;
+    const topKeywords = rep.matched.slice(0, 8).map((k) => k.display).join(', ');
+    const gaps =
+      rep.gaps.length > 0
+        ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
+        : 'ندارد (تمام مهارت‌های ذکرشده پوشش داده شد)';
+
+    const caption = [
+      `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
+      ``,
+      `💼 <b>عنوان پوزیشن هدف:</b> ${result.resume.header.headline}`,
+      `📊 <b>نمره تطابق ATS:</b> <code>${rep.score}/100</code>`,
+      `🤖 <b>مدل هوش مصنوعی:</b> ${result.usedAi ? 'Llama 3.1 8B (Workers AI)' : 'Deterministic Matcher'}`,
+      `✅ <b>کلمات کلیدی منطبق (${rep.matched.length}):</b> ${topKeywords}`,
+      `⚠️ <b>گپ‌های مهارتی (در رزومه نبود و جعل نشد):</b> ${gaps}`,
+      ``,
+      `📝 <b>خلاصه شغلی تولیدشده:</b>`,
+      `<blockquote>${escapeHtml(result.resume.summary)}</blockquote>`,
+      ``,
+      `📄 <i>فایل Word (.docx) استاندارد و تک‌ستونه برای ارسال پیوست شد.</i>`,
+    ].join('\n');
+
+    // 4. Deliver document
+    await sendResumeDocument(
+      env.TELEGRAM_BOT_TOKEN,
+      chatId,
+      docxBytes,
+      filename,
+      caption
+    );
+  } catch (err: any) {
+    console.error('Direct JD tailor failed:', err);
+    await sendTelegramMessage(
+      env.TELEGRAM_BOT_TOKEN,
+      chatId,
+      `❌ خطا در ساخت رزومه: ${err?.message || String(err)}`
+    );
+  }
+}
+
+/** Handles button click under an alerted lead. */
 async function handleTailorRequest(env: Env, chatId: string | number, leadId: string) {
   try {
     // 1. Send status notification
     await sendTelegramMessage(
       env.TELEGRAM_BOT_TOKEN,
       chatId,
-      '⏳ <b>در حال تحلیل موقعیت شغلی و استخراج کلمات کلیدی ATS...</b>'
+      '⏳ <b>در حال تحلیل موقعیت شغلی و استخراج کلمات کلیدی با هوش مصنوعی...</b>'
     );
 
     // 2. Fetch lead info from KV
@@ -193,11 +262,8 @@ async function handleTailorRequest(env: Env, chatId: string | number, leadId: st
       }
     }
 
-    // 4. Tailor Resume deterministically (Zero-Invention ATS 100)
-    const result = await tailorResume({
-      master,
-      jd: jdText,
-    });
+    // 4. Tailor Resume with Workers AI
+    const result = await aiTailorResume(env.AI, master, jdText);
 
     // 5. Build DOCX
     const docxBytes = buildDocx(result.resume);
@@ -206,17 +272,22 @@ async function handleTailorRequest(env: Env, chatId: string | number, leadId: st
     // 6. Report summary
     const rep = result.report;
     const topKeywords = rep.matched.slice(0, 8).map((k) => k.display).join(', ');
-    const gaps = rep.gaps.length > 0
-      ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
-      : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
+    const gaps =
+      rep.gaps.length > 0
+        ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
+        : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
 
     const caption = [
       `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
       ``,
       `💼 <b>پوزیشن:</b> ${roleTitle} (${companyName})`,
       `📊 <b>نمره تطابق ATS:</b> <code>${rep.score}/100</code>`,
+      `🤖 <b>مدل هوش مصنوعی:</b> ${result.usedAi ? 'Llama 3.1 8B (Workers AI)' : 'Deterministic Matcher'}`,
       `✅ <b>کلمات کلیدی منطبق (${rep.matched.length}):</b> ${topKeywords}`,
       `⚠️ <b>گپ‌های مهارتی:</b> ${gaps}`,
+      ``,
+      `📝 <b>خلاصه شغلی تولیدشده:</b>`,
+      `<blockquote>${escapeHtml(result.resume.summary)}</blockquote>`,
       ``,
       `📄 <i>فایل ورد تک‌ستونه، استاندارد و بدون جدول جهت عبور موفق از فیلتر اولیه ATS.</i>`,
     ].join('\n');
@@ -237,6 +308,13 @@ async function handleTailorRequest(env: Env, chatId: string | number, leadId: st
       `❌ خطا در ساخت رزومه: ${err?.message || String(err)}`
     );
   }
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
