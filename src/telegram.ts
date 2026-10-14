@@ -157,6 +157,42 @@ export async function sendResumeDocument(
   }
 }
 
+export async function sendResumePdf(
+  botToken: string,
+  chatId: string | number,
+  pdfBytes: Uint8Array,
+  filename: string,
+  caption?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  const fileBlob = new Blob([pdfBytes], {
+    type: 'application/pdf',
+  });
+  form.append('document', fileBlob, filename);
+  if (caption) {
+    const safeCaption = caption.length > 1000 ? caption.slice(0, 997) + '...' : caption;
+    form.append('caption', safeCaption);
+    form.append('parse_mode', 'HTML');
+  }
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Telegram] sendResumePdf failed: ${res.status} - ${errText}`);
+      return { ok: false, error: `${res.status}: ${errText}` };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    console.error(`[Telegram] sendResumePdf network error:`, err);
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')

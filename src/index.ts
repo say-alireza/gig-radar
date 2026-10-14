@@ -5,11 +5,13 @@ import {
   sendTelegramMessage,
   answerCallbackQuery,
   sendResumeDocument,
+  sendResumePdf,
   updateTelegramDashboard,
 } from './telegram';
 import master from './resume/master.json';
 import { aiTailorResume } from './resume/ai-tailor';
 import { buildDocx, resumeFilename } from './resume/docx';
+import { buildPdf, resumePdfFilename } from './resume/pdf';
 
 export interface Env {
   GIG_KV: KVNamespace;
@@ -253,49 +255,35 @@ async function handleTailorWithJd(
     // 1. Tailor Resume using Cloudflare Workers AI
     const result = await aiTailorResume(env.AI, master, jdText);
 
-    // 2. Build DOCX
-    const docxBytes = buildDocx(result.resume);
-    const filename = resumeFilename(result.resume.header.name, targetCompany || 'Resume');
+    // 2. Build 1-Page PDF
+    const pdfBytes = await buildPdf(result.resume);
+    const pdfFilename = resumePdfFilename(result.resume.header.name, targetCompany || 'Resume');
 
-    // 3. Format Report & Send Report Message first
+    // 3. Deliver PDF directly to Telegram
     const rep = result.report;
-    const topKeywords = rep.matched.slice(0, 8).map((k) => k.display).join(', ');
-    const gaps =
-      rep.gaps.length > 0
-        ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
-        : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
+    const topKeywords = rep.matched.slice(0, 6).map((k) => k.display).join(', ');
 
-    const reportMsg = [
-      `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
-      ``,
-      `💼 <b>پوزیشن هدف:</b> ${escapeHtml(targetTitle || result.resume.header.headline)} (${escapeHtml(targetCompany)})`,
-      `📊 <b>نمره تطابق ATS:</b> <code>${rep.score}/100</code>`,
-      `🤖 <b>مدل هوش مصنوعی:</b> ${result.usedAi ? 'Llama 3.1 8B (Workers AI)' : 'Deterministic Matcher'}`,
-      `✅ <b>کلمات کلیدی منطبق (${rep.matched.length}):</b> ${topKeywords}`,
-      `⚠️ <b>گپ‌های مهارتی (در رزومه نبود و جعل نشد):</b> ${gaps}`,
-      ``,
-      `📝 <b>خلاصه شغلی بازنویسی‌شده برای این آگهی:</b>`,
-      `<blockquote>${escapeHtml(result.resume.summary)}</blockquote>`,
+    const caption = [
+      `📄 <b>Alireza Rahimpanah — Tailored Resume (PDF)</b>`,
+      `💼 <b>Target:</b> ${escapeHtml(targetTitle || result.resume.header.headline)} (${escapeHtml(targetCompany)})`,
+      `📊 <b>ATS Score:</b> <code>${rep.score}/100</code>`,
+      `✅ <b>Matched:</b> ${topKeywords}`,
     ].join('\n');
 
-    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, reportMsg);
-
-    // 4. Deliver Word document with short safe caption
-    const docCaption = `📄 <b>رزومه تک‌صفحه‌ای اختصاصی (DOCX / استایل ATS)</b>`;
-    const docRes = await sendResumeDocument(
+    const pdfRes = await sendResumePdf(
       env.TELEGRAM_BOT_TOKEN,
       chatId,
-      docxBytes,
-      filename,
-      docCaption
+      pdfBytes,
+      pdfFilename,
+      caption
     );
 
-    if (!docRes.ok) {
-      console.error('[sendResumeDocument] Delivery error:', docRes.error);
+    if (!pdfRes.ok) {
+      console.error('[sendResumePdf] Delivery error:', pdfRes.error);
       await sendTelegramMessage(
         env.TELEGRAM_BOT_TOKEN,
         chatId,
-        `❌ خطا در ارسال فایل سند به تلگرام: ${docRes.error}`
+        `❌ خطا در ارسال فایل PDF به تلگرام: ${pdfRes.error}`
       );
     }
   } catch (err: any) {
