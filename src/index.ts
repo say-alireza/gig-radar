@@ -72,7 +72,7 @@ export default {
       try {
         const update: any = await request.json();
 
-        // 1. Handle Callback Query (click "📝 ساخت رزومه اختصاصی (ATS 100)")
+        // 1. Handle Callback Query (e.g. click "📝 ساخت رزومه اختصاصی (ATS 100)")
         if (update?.callback_query) {
           const cb = update.callback_query;
           const data: string = cb.data || '';
@@ -80,15 +80,50 @@ export default {
 
           if (data.startsWith('tailor:') && chatId) {
             const leadId = data.replace('tailor:', '');
-            // Immediate feedback popup to Telegram
+
+            // Immediate acknowledgement popup
             await answerCallbackQuery(
               env.TELEGRAM_BOT_TOKEN,
               cb.id,
-              '⏳ در حال ساخت رزومه بهینه‌شده با هوش مصنوعی...'
+              '📋 لطفاً شرح شغل را بفرستید...'
             );
 
-            // Execute in background so the webhook responds immediately
-            ctx.waitUntil(handleTailorRequest(env, chatId, leadId));
+            // Fetch lead metadata from KV
+            let leadTitle = 'Software Engineer';
+            let leadCompany = 'Contract';
+            const raw = await env.GIG_KV.get(leadId);
+            if (raw) {
+              try {
+                const leadObj = JSON.parse(raw);
+                leadTitle = leadObj.title || leadTitle;
+                leadCompany = leadObj.company || leadCompany;
+              } catch {}
+            }
+
+            // Save user state in KV: waiting for JD text for this specific lead
+            await env.GIG_KV.put(
+              `user_state:${chatId}`,
+              JSON.stringify({
+                action: 'waiting_jd',
+                leadId,
+                title: leadTitle,
+                company: leadCompany,
+              }),
+              { expirationTtl: 3600 }
+            );
+
+            // Ask the user to copy/paste the JD
+            const promptMsg = [
+              `📋 <b>لطفاً متن شرح شغل (Job Description) را ارسال کنید:</b>`,
+              ``,
+              `💼 <b>پوزیشن انتخاب‌شده:</b> ${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)})`,
+              ``,
+              `متن شرح شغل، نیازمندی‌ها و مهارت‌های خواسته‌شده (Requirements / Stack) را از صفحه آگهی کپی کرده و <b>همینجا در چت پیست نمایید</b>.`,
+              ``,
+              `🤖 <i>به محض دریافت متن، هوش مصنوعی رزومه مادر شما را اختصاصاً متناسب با نیازمندی‌های این پوزیشن بازنویسی کرده و فایل Word (.docx) استاندارد ATS را تحویل می‌دهد.</i>`,
+            ].join('\n');
+
+            await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, promptMsg);
             return new Response('OK');
           }
         }
@@ -98,17 +133,43 @@ export default {
         const text = update?.message?.text;
 
         if (chatId && text) {
+          // Check if user is replying to a "waiting_jd" request
+          const stateRaw = await env.GIG_KV.get(`user_state:${chatId}`);
+          if (stateRaw) {
+            try {
+              const state = JSON.parse(stateRaw);
+              if (state?.action === 'waiting_jd') {
+                await env.GIG_KV.delete(`user_state:${chatId}`);
+                await sendTelegramMessage(
+                  env.TELEGRAM_BOT_TOKEN,
+                  chatId,
+                  `⏳ <b>متن شرح شغل دریافت شد!</b>\nدر حال تحلیل نیازمندی‌ها و بازنویسی رزومه برای <b>${escapeHtml(state.title)} (${escapeHtml(state.company)})</b> با هوش مصنوعی...`
+                );
+                ctx.waitUntil(
+                  handleTailorWithJd(
+                    env,
+                    chatId,
+                    text.trim(),
+                    state.title,
+                    state.company
+                  )
+                );
+                return new Response('OK');
+              }
+            } catch {}
+          }
+
           if (text.startsWith('/start')) {
             await sendTelegramMessage(
               env.TELEGRAM_BOT_TOKEN,
               chatId,
-              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn & HackerNews for <b>Contract & Freelance Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\n💡 <b>دو راه برای ساخت رزومه اختصاصی:</b>\n1. روی دکمه <b>📝 ساخت رزومه اختصاصی</b> زیر هر آگهی کلیک کنید.\n2. یا <b>متن کامل هر شرح شغل (JD)</b> را مستقیماً همینجا بفرستید تا هوش مصنوعی فوراً رزومه متناسب با آن را بازنویسی کند و فایل Word (.docx) تحویل دهد.\n\n/scan برای اسکن دستی | /status برای مشاهده وضعیت.`
+              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn & HackerNews for <b>100% Remote Contract Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\n💡 <b>دو روش ساخت رزومه اختصاصی:</b>\n1. روی دکمه <b>📝 ساخت رزومه اختصاصی</b> زیر هر آگهی بزنید؛ ربات از شما متن آگهی را می‌خواهد و رزومه متناسب می‌سازد.\n2. یا هر زمان <b>متن هر شرح شغل (JD)</b> را مستقیماً همینجا بفرستید تا هوش مصنوعی فوراً رزومه اختصاصی و فایل Word (.docx) برایتان تولید کند.\n\n/scan برای اسکن دستی | /status برای داشبورد زنده.`
             );
           } else if (text.startsWith('/scan')) {
             await sendTelegramMessage(
               env.TELEGRAM_BOT_TOKEN,
               chatId,
-              `🔍 Scanning LinkedIn for fresh contract & freelance gigs...`
+              `🔍 Scanning for fresh remote contract & freelance gigs...`
             );
             ctx.waitUntil(scanAndNotify(env, true));
           } else if (text.startsWith('/status')) {
@@ -124,14 +185,16 @@ export default {
               })
             );
           } else {
-            // Direct Job Description text sent by the user!
+            // User pasted a Job Description directly without clicking a button first
             if (text.trim().length >= 30) {
               await sendTelegramMessage(
                 env.TELEGRAM_BOT_TOKEN,
                 chatId,
                 '⏳ <b>متن شرح شغل دریافت شد. در حال تحلیل نیازمندی‌ها و بازنویسی رزومه با هوش مصنوعی...</b>'
               );
-              ctx.waitUntil(handleDirectJdRequest(env, chatId, text.trim()));
+              ctx.waitUntil(
+                handleTailorWithJd(env, chatId, text.trim(), 'Custom Role', 'Contract')
+              );
             } else {
               await sendTelegramMessage(
                 env.TELEGRAM_BOT_TOKEN,
@@ -162,16 +225,21 @@ export default {
   },
 };
 
-/** Handles direct text sent by the user (pasted Job Description). */
-async function handleDirectJdRequest(env: Env, chatId: string | number, jdText: string) {
+/** Unified tailor engine with Workers AI and DOCX export. */
+async function handleTailorWithJd(
+  env: Env,
+  chatId: string | number,
+  jdText: string,
+  targetTitle: string,
+  targetCompany: string
+) {
   try {
     // 1. Tailor Resume using Cloudflare Workers AI
     const result = await aiTailorResume(env.AI, master, jdText);
 
     // 2. Build DOCX
     const docxBytes = buildDocx(result.resume);
-    const targetTitle = result.resume.header.headline || 'Custom_Role';
-    const filename = resumeFilename(result.resume.header.name, targetTitle.slice(0, 25));
+    const filename = resumeFilename(result.resume.header.name, targetCompany || 'Resume');
 
     // 3. Format Report & Stats
     const rep = result.report;
@@ -179,21 +247,21 @@ async function handleDirectJdRequest(env: Env, chatId: string | number, jdText: 
     const gaps =
       rep.gaps.length > 0
         ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
-        : 'ندارد (تمام مهارت‌های ذکرشده پوشش داده شد)';
+        : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
 
     const caption = [
       `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
       ``,
-      `💼 <b>عنوان پوزیشن هدف:</b> ${result.resume.header.headline}`,
+      `💼 <b>پوزیشن هدف:</b> ${escapeHtml(targetTitle || result.resume.header.headline)} (${escapeHtml(targetCompany)})`,
       `📊 <b>نمره تطابق ATS:</b> <code>${rep.score}/100</code>`,
       `🤖 <b>مدل هوش مصنوعی:</b> ${result.usedAi ? 'Llama 3.1 8B (Workers AI)' : 'Deterministic Matcher'}`,
       `✅ <b>کلمات کلیدی منطبق (${rep.matched.length}):</b> ${topKeywords}`,
       `⚠️ <b>گپ‌های مهارتی (در رزومه نبود و جعل نشد):</b> ${gaps}`,
       ``,
-      `📝 <b>خلاصه شغلی تولیدشده:</b>`,
+      `📝 <b>خلاصه شغلی بازنویسی‌شده برای این آگهی:</b>`,
       `<blockquote>${escapeHtml(result.resume.summary)}</blockquote>`,
       ``,
-      `📄 <i>فایل Word (.docx) استاندارد و تک‌ستونه برای ارسال پیوست شد.</i>`,
+      `📄 <i>فایل ورد تک‌ستونه، سفارشی‌شده با هوش مصنوعی و بهینه‌سازی‌شده برای سیستم‌های ATS پیوست شد.</i>`,
     ].join('\n');
 
     // 4. Deliver document
@@ -205,103 +273,7 @@ async function handleDirectJdRequest(env: Env, chatId: string | number, jdText: 
       caption
     );
   } catch (err: any) {
-    console.error('Direct JD tailor failed:', err);
-    await sendTelegramMessage(
-      env.TELEGRAM_BOT_TOKEN,
-      chatId,
-      `❌ خطا در ساخت رزومه: ${err?.message || String(err)}`
-    );
-  }
-}
-
-/** Handles button click under an alerted lead. */
-async function handleTailorRequest(env: Env, chatId: string | number, leadId: string) {
-  try {
-    // 1. Send status notification
-    await sendTelegramMessage(
-      env.TELEGRAM_BOT_TOKEN,
-      chatId,
-      '⏳ <b>در حال تحلیل موقعیت شغلی و استخراج کلمات کلیدی با هوش مصنوعی...</b>'
-    );
-
-    // 2. Fetch lead info from KV
-    let lead: GigLead | null = null;
-    const raw = await env.GIG_KV.get(leadId);
-    if (raw) {
-      try {
-        lead = JSON.parse(raw);
-      } catch {}
-    }
-
-    // 3. Obtain JD text
-    let jdText = '';
-    let roleTitle = 'Software Engineer';
-    let companyName = 'Contract';
-
-    if (lead) {
-      roleTitle = lead.title;
-      companyName = lead.company;
-      jdText = lead.snippet || `${lead.title} at ${lead.company}`;
-
-      // If LinkedIn, fetch full description
-      if (lead.source === 'LinkedIn' && lead.id.startsWith('linkedin:')) {
-        const jobId = lead.id.replace('linkedin:', '');
-        const fullDesc = await fetchLinkedInJobDescription(jobId);
-        if (fullDesc && fullDesc.length > 50) {
-          jdText = `${lead.title}\n${lead.company}\n${fullDesc}`;
-        }
-      }
-    } else {
-      if (leadId.startsWith('linkedin:')) {
-        const jobId = leadId.replace('linkedin:', '');
-        const fullDesc = await fetchLinkedInJobDescription(jobId);
-        if (fullDesc) jdText = fullDesc;
-      }
-      if (!jdText) {
-        jdText = 'Full-Stack Developer Contract (React, Next.js, Django, TypeScript, Tailwind CSS, REST APIs)';
-      }
-    }
-
-    // 4. Tailor Resume with Workers AI
-    const result = await aiTailorResume(env.AI, master, jdText);
-
-    // 5. Build DOCX
-    const docxBytes = buildDocx(result.resume);
-    const filename = resumeFilename(result.resume.header.name, companyName);
-
-    // 6. Report summary
-    const rep = result.report;
-    const topKeywords = rep.matched.slice(0, 8).map((k) => k.display).join(', ');
-    const gaps =
-      rep.gaps.length > 0
-        ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
-        : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
-
-    const caption = [
-      `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
-      ``,
-      `💼 <b>پوزیشن:</b> ${roleTitle} (${companyName})`,
-      `📊 <b>نمره تطابق ATS:</b> <code>${rep.score}/100</code>`,
-      `🤖 <b>مدل هوش مصنوعی:</b> ${result.usedAi ? 'Llama 3.1 8B (Workers AI)' : 'Deterministic Matcher'}`,
-      `✅ <b>کلمات کلیدی منطبق (${rep.matched.length}):</b> ${topKeywords}`,
-      `⚠️ <b>گپ‌های مهارتی:</b> ${gaps}`,
-      ``,
-      `📝 <b>خلاصه شغلی تولیدشده:</b>`,
-      `<blockquote>${escapeHtml(result.resume.summary)}</blockquote>`,
-      ``,
-      `📄 <i>فایل ورد تک‌ستونه، استاندارد و بدون جدول جهت عبور موفق از فیلتر اولیه ATS.</i>`,
-    ].join('\n');
-
-    // 7. Deliver DOCX directly to Telegram
-    await sendResumeDocument(
-      env.TELEGRAM_BOT_TOKEN,
-      chatId,
-      docxBytes,
-      filename,
-      caption
-    );
-  } catch (err: any) {
-    console.error('Tailor request failed:', err);
+    console.error('Tailor with JD failed:', err);
     await sendTelegramMessage(
       env.TELEGRAM_BOT_TOKEN,
       chatId,

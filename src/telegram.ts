@@ -10,9 +10,10 @@ export async function sendLeadToTelegram(
 
   let message = `${sourceEmoji} <b>New Lead: ${escapeHtml(lead.title)}</b>\n\n`;
   message += `🏢 <b>Company:</b> ${escapeHtml(lead.company)}\n`;
-  message += `📍 <b>Location:</b> ${escapeHtml(lead.location)}\n`;
+  message += `💼 <b>Workplace:</b> 🌐 100% Remote (Contract)\n`;
+  message += `📍 <b>Region / Location:</b> ${escapeHtml(lead.location)}\n`;
   message += `⏱ <b>Published:</b> <code>${escapeHtml(lead.posted || 'Recent')}</code>\n`;
-  message += `🏷 <b>Source:</b> ${lead.source} (Contract / Remote)\n`;
+  message += `🏷 <b>Source:</b> ${lead.source}\n`;
 
   if (lead.directContact) {
     message += `✉️ <b>Direct Email:</b> <code>${escapeHtml(lead.directContact)}</code>\n`;

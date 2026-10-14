@@ -69,6 +69,12 @@ export async function fetchLinkedInContractJobs(keyword: string): Promise<{ stat
       );
       if (!isTech) continue;
 
+      // STRICT FILTER: Reject any on-site or hybrid roles
+      const combined = `${title} ${location}`.toLowerCase();
+      if (/(on-site|onsite|hybrid|in-office|in person)/i.test(combined)) {
+        continue;
+      }
+
       leads.push({
         id: `linkedin:${jobId}`,
         source: 'LinkedIn',

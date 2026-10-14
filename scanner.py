@@ -158,6 +158,11 @@ def fetch_linkedin_leads() -> Tuple[List[Dict], str]:
                 if re.search(r"full[- ]?time\s+only", title, re.I):
                     continue
 
+                # STRICT FILTER: Reject on-site or hybrid roles
+                combined = f"{title} {location}".lower()
+                if re.search(r"\b(on-site|onsite|hybrid|in-office|in person)\b", combined, re.I):
+                    continue
+
                 leads.append({
                     "id": f"linkedin:{job_id}",
                     "source": "LinkedIn",
@@ -286,9 +291,10 @@ def send_to_telegram(lead: Dict) -> bool:
 
     msg = f"{icon} <b>New Lead: {html.escape(lead['title'])}</b>\n\n"
     msg += f"🏢 <b>Company:</b> {html.escape(lead['company'])}\n"
-    msg += f"📍 <b>Location:</b> {html.escape(lead['location'])}\n"
+    msg += f"💼 <b>Workplace:</b> 🌐 100% Remote (Contract)\n"
+    msg += f"📍 <b>Region / Location:</b> {html.escape(lead['location'])}\n"
     msg += f"⏱ <b>Published:</b> <code>{html.escape(lead.get('posted', 'Recent'))}</code>\n"
-    msg += f"🏷 <b>Source:</b> {lead['source']} (Remote Contract)\n"
+    msg += f"🏷 <b>Source:</b> {lead['source']}\n"
 
     if lead.get("directContact"):
         msg += f"✉️ <b>Direct Email:</b> <code>{html.escape(lead['directContact'])}</code>\n"
