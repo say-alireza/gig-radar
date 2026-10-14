@@ -1,5 +1,5 @@
 import { ResumeDoc, buildHeader, buildEducation, buildSkills, tailorResume, scoreDoc } from './tailor';
-import { AtsReport } from './ats';
+import { AtsReport, buildVocabulary, extractJdKeywords } from './ats';
 
 export interface AiTailorResult {
   ok: boolean;
@@ -24,8 +24,21 @@ export async function aiTailorResume(
     };
   }
 
+  // Extract ATS keywords deterministically from JD to guide the LLM
+  const vocab = buildVocabulary(master);
+  const targetKeywords = extractJdKeywords(jd, vocab);
+  const keywordListStr = targetKeywords
+    .map((k) => `• ${k.display} (${k.group} - frequency: ${k.inJd}x)`)
+    .join('\n');
+
   const prompt = `You are a Principal Technical Recruiter and ATS Optimization Expert.
 Your task is to tailor a software engineer's resume for a specific Job Description (JD).
+
+### TARGET JOB DESCRIPTION:
+${jd.slice(0, 3500)}
+
+### CRITICAL ATS KEYWORDS REQUIRED BY THIS JOB (MUST BE INCLUDED):
+${keywordListStr || '• React\n• TypeScript\n• Next.js\n• Python\n• Django'}
 
 ### CANDIDATE MASTER PROFILE (REAL FACTS ONLY - DO NOT INVENT UNLISTED FACTS):
 ${JSON.stringify(
@@ -52,15 +65,19 @@ ${JSON.stringify(
   2
 )}
 
-### TARGET JOB DESCRIPTION:
-${jd.slice(0, 3500)}
-
-### INSTRUCTIONS (STRICT SINGLE-PAGE ATS RESUME):
-1. "headline": Create a targeted professional headline aligning the candidate's core stack (React, Next.js, Django, TypeScript, Tailwind) with the target job title.
-2. "summary": Write an impactful 2-3 sentence Professional Summary tailored specifically to the JD's core problems.
-3. "experience": The entire resume MUST fit on ONE SINGLE PAGE. Select ONLY 2-3 impactful bullets for exp_epd, 2 bullets for exp_pims, and 1-2 bullets for exp_intern. Rephrase bullets to naturally incorporate keywords from the JD without inventing fake claims.
-4. "projects": Select ONLY the top 2 most relevant projects that demonstrate the required stack, with 1-2 concise bullets each.
-5. "skills": Reorder skill items in each category so that skills mentioned in the JD appear first.
+### ATS RESUME OPTIMIZATION RULES (STANDARDS FROM ATS OPTIMIZER):
+1. ATS SCORE GOAL: 100/100.
+2. KEYWORD DENSITY:
+   - "headline": Targeted professional headline with matching job title and core stack.
+   - "summary": 2-3 sentences incorporating 5-8 of the critical ATS keywords naturally.
+   - "skills": List all matched technologies explicitly at the top of each category.
+   - "experience": For each bullet, use active achievement framing ("Accomplished [X] as measured by [Y] by doing [Z]") and weave the target keywords directly into achievements.
+3. SINGLE-PAGE CONSTRAINT:
+   - Maximum 2-3 bullets for exp_epd
+   - Maximum 2 bullets for exp_pims
+   - Maximum 1-2 bullets for exp_intern
+   - Exactly 2 top projects with 1-2 bullets each
+4. ZERO INVENTION: Keep all companies, titles, degrees, and dates 100% faithful to the candidate master profile.
 
 Respond ONLY with valid JSON in this exact structure:
 {
@@ -190,7 +207,32 @@ Respond ONLY with valid JSON in this exact structure:
       education: buildEducation(master),
     };
 
-    const report = scoreDoc(master, doc, jd);
+    let report = scoreDoc(master, doc, jd);
+
+    // Guaranteed ATS 100 Coverage Pass:
+    // If the LLM omitted any target keywords from the JD that exist in the master profile,
+    // inject them into the relevant skill category so coverage is 100% and score is 100/100!
+    if (report.missing.length > 0) {
+      for (const m of report.missing) {
+        let category = doc.skills.find(
+          (g) => g.category.toLowerCase() === m.group.toLowerCase()
+        );
+        if (!category) {
+          category = doc.skills.find(
+            (g) =>
+              m.group.toLowerCase().includes(g.category.toLowerCase()) ||
+              g.category.toLowerCase().includes(m.group.toLowerCase())
+          );
+        }
+        if (!category && doc.skills.length > 0) {
+          category = doc.skills[doc.skills.length - 1];
+        }
+        if (category && !category.items.some((it) => it.toLowerCase() === m.display.toLowerCase())) {
+          category.items.unshift(m.display);
+        }
+      }
+      report = scoreDoc(master, doc, jd);
+    }
 
     return {
       ok: true,
