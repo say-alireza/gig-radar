@@ -291,6 +291,98 @@ def fetch_hn_leads() -> Tuple[List[Dict], str]:
     return leads, status_summary
 
 
+def fetch_wwr_leads() -> Tuple[List[Dict], str]:
+    urls = [
+        "https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss",
+        "https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss",
+    ]
+    leads = []
+    status = "200 OK"
+    tech_pattern = re.compile(r"\b(react|next\.?js|django|python|typescript|full[- ]?stack|frontend)\b", re.I)
+
+    for url in urls:
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=12)
+            if r.status_code != 200:
+                continue
+            soup = BeautifulSoup(r.text, "xml")
+            for item in soup.find_all("item")[:15]:
+                raw_title = item.find("title").get_text(strip=True) if item.find("title") else ""
+                link = item.find("link").get_text(strip=True) if item.find("link") else ""
+                desc_elem = item.find("description")
+                desc_text = desc_elem.get_text(strip=True) if desc_elem else ""
+                clean_desc = re.sub(r"<[^>]+>", " ", desc_text).strip()
+
+                if not tech_pattern.search(f"{raw_title} {clean_desc[:500]}"):
+                    continue
+
+                parts = raw_title.split(":")
+                company = parts[0].strip() if len(parts) > 1 else "Tech Company"
+                title = parts[1].strip() if len(parts) > 1 else raw_title
+
+                leads.append({
+                    "id": f"wwr:{link}",
+                    "source": "WeWorkRemotely",
+                    "title": title,
+                    "company": company,
+                    "location": "100% Remote",
+                    "url": link,
+                    "posted": "Recent",
+                    "description": clean_desc,
+                    "snippet": clean_desc[:400] if len(clean_desc) > 400 else clean_desc,
+                })
+        except Exception as e:
+            print(f"[WWR] Error fetching {url}: {e}")
+            status = "Partial Err"
+
+    return leads, status
+
+
+def fetch_remoteok_leads() -> Tuple[List[Dict], str]:
+    tags = ["react", "python"]
+    leads = []
+    status = "200 OK"
+    tech_pattern = re.compile(r"\b(react|next\.?js|django|python|typescript|full[- ]?stack)\b", re.I)
+
+    for tag in tags:
+        try:
+            r = requests.get(f"https://remoteok.com/api?tag={tag}", headers=HEADERS, timeout=12)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            for item in data[1:15]:
+                if not isinstance(item, dict):
+                    continue
+                pos = item.get("position", "")
+                company = item.get("company", "Tech Co")
+                url = item.get("url", "")
+                apply_url = item.get("apply_url") or url
+                raw_desc = item.get("description", "")
+                clean_desc = re.sub(r"<[^>]+>", " ", raw_desc).strip()
+
+                if not tech_pattern.search(f"{pos} {clean_desc[:400]}"):
+                    continue
+
+                target_url = apply_url if apply_url.startswith("http") else f"https://remoteok.com{apply_url}"
+
+                leads.append({
+                    "id": f"remoteok:{item.get('id', url)}",
+                    "source": "RemoteOK",
+                    "title": pos,
+                    "company": company,
+                    "location": "Worldwide Remote",
+                    "url": target_url,
+                    "posted": item.get("date", "Recent")[:10],
+                    "description": clean_desc,
+                    "snippet": clean_desc[:400] if len(clean_desc) > 400 else clean_desc,
+                })
+        except Exception as e:
+            print(f"[RemoteOK] Error fetching {tag}: {e}")
+            status = "Partial Err"
+
+    return leads, status
+
+
 def send_to_telegram(lead: Dict) -> bool:
     if not TELEGRAM_BOT_TOKEN:
         print(f"[Dry-run] Lead: {lead['title']} ({lead['url']})")
@@ -300,6 +392,8 @@ def send_to_telegram(lead: Dict) -> bool:
         "LinkedIn": "💼",
         "Reddit": "🔴",
         "HackerNews": "🔶",
+        "WeWorkRemotely": "🌐",
+        "RemoteOK": "🚀",
     }
     icon = source_icons.get(lead["source"], "🌐")
 
@@ -485,6 +579,18 @@ def main():
     hn_leads, hn_status = fetch_hn_leads()
     print(f"Found {len(hn_leads)} HN leads. Status: {hn_status}")
     all_leads.extend(hn_leads)
+
+    # 4. Scrape WeWorkRemotely (Open ATS forms)
+    print("Scraping WeWorkRemotely...")
+    wwr_leads, wwr_status = fetch_wwr_leads()
+    print(f"Found {len(wwr_leads)} WWR leads. Status: {wwr_status}")
+    all_leads.extend(wwr_leads)
+
+    # 5. Scrape RemoteOK (Open ATS forms)
+    print("Scraping RemoteOK...")
+    remoteok_leads, remoteok_status = fetch_remoteok_leads()
+    print(f"Found {len(remoteok_leads)} RemoteOK leads. Status: {remoteok_status}")
+    all_leads.extend(remoteok_leads)
 
     new_count = 0
     for lead in all_leads:
