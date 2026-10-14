@@ -342,13 +342,22 @@ async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
     let pitch: string | undefined = undefined;
     if (env.AI) {
       try {
-        const aiPrompt = `You are Alireza, a full-stack developer (React, Next.js, Django, Tailwind). Write a 2-sentence direct proposal pitch to the hiring team for this contract gig:\nRole: ${lead.title} at ${lead.company}\nSnippet: ${lead.snippet}\nKeep it confident, highlight relevant React/Django experience, zero fluff.`;
+        const aiPrompt = `You are Alireza, a full-stack engineer (React, Next.js, Django, Tailwind). Write a 2-sentence direct proposal pitch to the hiring team for this contract gig:
+Role: ${lead.title} at ${lead.company}
+Snippet: ${lead.snippet}
+HUMANIZER RULES:
+- Write in a natural, direct developer tone (no AI cliches like "delve", "game-changer", "passionate", "seamless").
+- Confident, specific to React/Django/Next.js achievements, zero fluff.`;
 
-        const response: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        const response: any = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
           messages: [{ role: 'user', content: aiPrompt }],
-          max_tokens: 100,
+          max_tokens: 120,
         });
-        pitch = response?.response?.trim();
+        pitch = (
+          response?.response ||
+          response?.choices?.[0]?.message?.content ||
+          ''
+        ).trim();
       } catch (e) {
         console.warn('[AI] Pitch error:', e);
       }

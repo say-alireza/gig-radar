@@ -79,6 +79,12 @@ ${JSON.stringify(
    - Exactly 2 top projects with 1-2 bullets each
 4. ZERO INVENTION: Keep all companies, titles, degrees, and dates 100% faithful to the candidate master profile.
 
+### HUMANIZER RULES (ANTI-AI-SLOP & NATURAL DEVELOPER VOICE):
+- BAN AI CLICHES: Do NOT use overused AI words: "delve", "testament", "pivotal", "tapestry", "seamless", "game-changer", "passionate", "foster", "leveraging", "spearheaded an initiative", "robust", "revolutionize", "endeavor".
+- NATURAL ENGINEER VOICE: Write clean, grounded, conversational yet professional sentences using active verbs (built, designed, shipped, reduced, handled, wrote, maintained).
+- AVOID PUFFERY: Never use hollow adjectives like "groundbreaking", "vibrant", "unmatched". State real engineering facts and metrics (e.g. "sub-50ms latency", "Core Web Vitals 98+").
+- STRICT JSON: Return only the JSON object. Zero conversational preamble.
+
 Respond ONLY with valid JSON in this exact structure:
 {
   "headline": "...",
