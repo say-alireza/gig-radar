@@ -115,7 +115,7 @@ Respond ONLY with valid JSON in this exact structure:
 }`;
 
   try {
-    const response: any = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
+    const response: any = await ai.run('@cf/meta/llama-3.2-3b-instruct', {
       messages: [
         {
           role: 'system',
@@ -124,11 +124,15 @@ Respond ONLY with valid JSON in this exact structure:
         },
         { role: 'user', content: prompt },
       ],
-      max_tokens: 2048,
+      max_tokens: 1500,
       temperature: 0.2,
     });
 
-    const responseText = response?.response?.trim() || '';
+    const responseText = (
+      response?.response ||
+      response?.choices?.[0]?.message?.content ||
+      ''
+    ).trim();
     const parsed = parseJsonFromResponse(responseText);
 
     const header = buildHeader(master);
