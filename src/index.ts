@@ -584,17 +584,19 @@ Role: ${lead.title} at ${lead.company}
 Snippet: ${lead.snippet}
 HUMANIZER RULES:
 - Write in a natural, direct developer tone (no AI cliches like "delve", "game-changer", "passionate", "seamless").
+- Output ONLY the pitch sentences directly. ZERO introductory preambles (do NOT say "Here is a pitch:" or "Sure").
 - Confident, specific to React/Django/Next.js achievements, zero fluff.`;
 
         const response: any = await env.AI.run('@cf/meta/llama-3.2-3b-instruct', {
           messages: [{ role: 'user', content: aiPrompt }],
           max_tokens: 120,
         });
-        pitch = (
+        const rawPitch = (
           response?.response ||
           response?.choices?.[0]?.message?.content ||
           ''
         ).trim();
+        pitch = rawPitch.replace(/^(here is|here's|certainly|sure)[^\n:]*[:\n]+/i, '').trim();
       } catch (e) {
         console.warn('[AI] Pitch error:', e);
       }

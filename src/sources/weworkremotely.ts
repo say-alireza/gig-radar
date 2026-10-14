@@ -1,4 +1,5 @@
 import { GigLead } from './linkedin';
+import { createLeadId } from './hash';
 
 export async function fetchWWRLeads(): Promise<GigLead[]> {
   const categories = [
@@ -44,7 +45,7 @@ export async function fetchWWRLeads(): Promise<GigLead[]> {
         const title = parts.length > 1 ? parts.slice(1).join(':').trim() : rawTitle;
 
         leads.push({
-          id: `wwr:${guid}`,
+          id: createLeadId('wwr', guid),
           source: 'WeWorkRemotely',
           title,
           company,

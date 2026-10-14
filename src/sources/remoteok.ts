@@ -1,4 +1,5 @@
 import { GigLead } from './linkedin';
+import { createLeadId } from './hash';
 
 export async function fetchRemoteOKLeads(tag = 'react'): Promise<GigLead[]> {
   const url = `https://remoteok.com/api?tag=${encodeURIComponent(tag)}`;
@@ -27,7 +28,7 @@ export async function fetchRemoteOKLeads(tag = 'react'): Promise<GigLead[]> {
       const desc = (item.description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
       leads.push({
-        id: `remoteok:${item.id || item.epoch || targetUrl}`,
+        id: createLeadId('remoteok', String(item.id || item.epoch || targetUrl)),
         source: 'RemoteOK',
         title: position,
         company,

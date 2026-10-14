@@ -48,13 +48,13 @@ export async function sendLeadToTelegram(
   inlineKeyboard.push([
     {
       text: '📝 ساخت رزومه اختصاصی (PDF)',
-      callback_data: `tailor:${lead.id.slice(0, 48)}`,
+      callback_data: `tailor:${lead.id}`,
     },
   ]);
   inlineKeyboard.push([
     {
       text: '🤖 پر کردن و اپلای خودکار (Cloud Apply)',
-      callback_data: `apply:${lead.id.slice(0, 48)}`,
+      callback_data: `apply:${lead.id}`,
     },
   ]);
 

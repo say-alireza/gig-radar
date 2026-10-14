@@ -57,17 +57,47 @@ export async function runFormAgent(options: {
 
     const pageTitle = (await page.title()) || 'Software Engineer';
 
-    // 1. If page has an "Apply" button that expands or navigates to the form, click it
+    // 1. If page has an "Apply" button, follow it to the actual application form/portal
     try {
       const applyTrigger = page
-        .locator('button:has-text("Apply"), a:has-text("Apply for this job"), a:has-text("Apply"), a[href*="#apply"]')
+        .locator(
+          'a#job-cta-alt, a.apply, a:has-text("Apply for this position"), a:has-text("Apply for this job"), a:has-text("Apply now"), button:has-text("Apply"), a[href*="apply"]'
+        )
         .first();
-      if ((await applyTrigger.count()) > 0 && (await applyTrigger.isVisible())) {
-        console.log('[FormAgent] Clicking Apply trigger to open application form...');
-        await applyTrigger.click();
-        await page.waitForTimeout(2000);
+      if ((await applyTrigger.count()) > 0) {
+        const href = await applyTrigger.getAttribute('href');
+        console.log(`[FormAgent] Found Apply link with href: ${href}`);
+
+        if (href && href.startsWith('mailto:')) {
+          const directEmail = href.replace('mailto:', '').split('?')[0].trim();
+          console.log(`[FormAgent] Direct application email found: ${directEmail}`);
+          if (botToken && chatId) {
+            await sendTelegramMessage(
+              botToken,
+              chatId,
+              `✉️ <b>این موقعیت از طریق ارسال مستقیم ایمیل اپلای می‌شود:</b>\n<code>${directEmail}</code>\n\nبرای ارسال رزومه از دکمه 📧 Send Email استفاده کنید.`
+            );
+          }
+          return { success: true };
+        } else if (href && href.startsWith('http') && !href.includes('weworkremotely.com/remote-jobs')) {
+          console.log(`[FormAgent] Navigating to external application portal: ${href}`);
+          await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 35000 });
+          await page.waitForTimeout(3000);
+        } else {
+          // Listen for new tab popup
+          const [popup] = await Promise.all([
+            context.waitForEvent('page', { timeout: 4000 }).catch(() => null),
+            applyTrigger.click({ timeout: 4000 }).catch(() => null),
+          ]);
+          if (popup) {
+            console.log('[FormAgent] Switched to application popup tab');
+            await popup.waitForLoadState('domcontentloaded');
+          }
+        }
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[FormAgent] Apply button follow error:', e);
+    }
 
     // 2. Try to automatically solve Cloudflare Turnstile / Checkbox if present
     try {
