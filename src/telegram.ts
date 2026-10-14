@@ -44,11 +44,17 @@ export async function sendLeadToTelegram(
     inlineKeyboard.push(linkRow);
   }
 
-  // Button to trigger custom resume generation on demand
+  // Buttons for Resume tailoring & Cloud Apply
   inlineKeyboard.push([
     {
-      text: '📝 ساخت رزومه اختصاصی (ATS 100)',
-      callback_data: `tailor:${lead.id.slice(0, 50)}`,
+      text: '📝 ساخت رزومه اختصاصی (PDF)',
+      callback_data: `tailor:${lead.id.slice(0, 48)}`,
+    },
+  ]);
+  inlineKeyboard.push([
+    {
+      text: '🤖 پر کردن و اپلای خودکار (Cloud Apply)',
+      callback_data: `apply:${lead.id.slice(0, 48)}`,
     },
   ]);
 

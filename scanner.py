@@ -163,6 +163,21 @@ def fetch_linkedin_leads() -> Tuple[List[Dict], str]:
                 if re.search(r"\b(on-site|onsite|hybrid|in-office|in person)\b", combined, re.I):
                     continue
 
+                desc = f"{title} at {company} (Remote Contract Gig)"
+                try:
+                    desc_resp = requests.get(
+                        f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}",
+                        headers=HEADERS,
+                        timeout=5
+                    )
+                    if desc_resp.status_code == 200:
+                        desc_soup = BeautifulSoup(desc_resp.text, "html.parser")
+                        desc_div = desc_soup.find("div", class_=lambda c: c and "description__text" in c)
+                        if desc_div:
+                            desc = desc_div.get_text(separator="\n", strip=True)
+                except Exception:
+                    pass
+
                 leads.append({
                     "id": f"linkedin:{job_id}",
                     "source": "LinkedIn",
@@ -171,7 +186,8 @@ def fetch_linkedin_leads() -> Tuple[List[Dict], str]:
                     "location": location,
                     "url": link,
                     "posted": posted,
-                    "snippet": f"{title} at {company} (Remote Contract Gig)",
+                    "description": desc,
+                    "snippet": desc[:400] if len(desc) > 400 else desc,
                 })
         except Exception as e:
             print(f"[LinkedIn] Error scraping '{kw}': {e}")
@@ -315,8 +331,14 @@ def send_to_telegram(lead: Dict) -> bool:
 
     inline_keyboard.append([
         {
-            "text": "📝 ساخت رزومه اختصاصی (ATS 100)",
-            "callback_data": f"tailor:{lead['id'][:50]}",
+            "text": "📝 ساخت رزومه اختصاصی (PDF)",
+            "callback_data": f"tailor:{lead['id'][:48]}",
+        }
+    ])
+    inline_keyboard.append([
+        {
+            "text": "🤖 پر کردن و اپلای خودکار (Cloud Apply)",
+            "callback_data": f"apply:{lead['id'][:48]}",
         }
     ])
 

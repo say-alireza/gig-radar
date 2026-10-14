@@ -75,35 +75,98 @@ export default {
       try {
         const update: any = await request.json();
 
-        // 1. Handle Callback Query (e.g. click "📝 ساخت رزومه اختصاصی (ATS 100)")
+        // 1. Handle Callback Query
         if (update?.callback_query) {
           const cb = update.callback_query;
           const data: string = cb.data || '';
           const chatId = cb.message?.chat?.id;
 
-          if (data.startsWith('tailor:') && chatId) {
-            const leadId = data.replace('tailor:', '');
-
-            // Immediate acknowledgement popup
+          // A) Cloud Auto-Apply with Playwright
+          if (data.startsWith('apply:') && chatId) {
+            const leadId = data.replace('apply:', '');
             await answerCallbackQuery(
               env.TELEGRAM_BOT_TOKEN,
               cb.id,
-              '📋 لطفاً شرح شغل را بفرستید...'
+              '🚀 ربات ابری Playwright در حال شروع به کار است...'
             );
 
-            // Fetch lead metadata from KV
+            let leadUrl = '';
+            let leadTitle = 'Software Engineer';
+            let leadCompany = 'Company';
+            const raw = await env.GIG_KV.get(leadId);
+            if (raw) {
+              try {
+                const leadObj = JSON.parse(raw);
+                leadUrl = leadObj.url || '';
+                leadTitle = leadObj.title || leadTitle;
+                leadCompany = leadObj.company || leadCompany;
+              } catch {}
+            }
+
+            if (!leadUrl) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                '❌ لینک موقعیت یافت نشد. لطفاً از دستور <code>/apply &lt;url&gt;</code> استفاده کنید.'
+              );
+              return new Response('OK');
+            }
+
+            await sendTelegramMessage(
+              env.TELEGRAM_BOT_TOKEN,
+              chatId,
+              `⏳ <b>درخواست اپلای خودکار برای ${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)}) ثبت شد!</b>\n\nربات ابری Playwright در حال باز کردن صفحه فرم، پر کردن فیلدها و ساخت رزومه PDF اختصاصی است.\nاسکرین‌شات از فرم تکمیل‌شده به زودی ارسال می‌شود.`
+            );
+
+            ctx.waitUntil(triggerCloudAutoApply(env.GITHUB_TOKEN || '', leadUrl, 'inspect'));
+            return new Response('OK');
+          }
+
+          // B) Tailor PDF Resume on Demand
+          if (data.startsWith('tailor:') && chatId) {
+            const leadId = data.replace('tailor:', '');
+
             let leadTitle = 'Software Engineer';
             let leadCompany = 'Contract';
+            let autoDesc = '';
+
             const raw = await env.GIG_KV.get(leadId);
             if (raw) {
               try {
                 const leadObj = JSON.parse(raw);
                 leadTitle = leadObj.title || leadTitle;
                 leadCompany = leadObj.company || leadCompany;
+                if (leadObj.description && leadObj.description.length > 100) {
+                  autoDesc = leadObj.description;
+                } else if (leadObj.snippet && leadObj.snippet.length > 100) {
+                  autoDesc = leadObj.snippet;
+                }
               } catch {}
             }
 
-            // Save user state in KV: waiting for JD text for this specific lead
+            // If Job Description was automatically extracted, generate PDF immediately!
+            if (autoDesc) {
+              await answerCallbackQuery(
+                env.TELEGRAM_BOT_TOKEN,
+                cb.id,
+                '⚡ در حال ساخت خودکار رزومه PDF...'
+              );
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                `⏳ <b>شرح شغل به صورت خودکار استخراج شد!</b>\nدر حال تحلیل نیازمندی‌ها و بازنویسی رزومه PDF برای <b>${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)})</b> با هوش مصنوعی...`
+              );
+              ctx.waitUntil(handleTailorWithJd(env, chatId, autoDesc, leadTitle, leadCompany));
+              return new Response('OK');
+            }
+
+            // Fallback: If description wasn't pre-extracted, ask the user to paste it
+            await answerCallbackQuery(
+              env.TELEGRAM_BOT_TOKEN,
+              cb.id,
+              '📋 لطفاً شرح شغل را بفرستید...'
+            );
+
             await env.GIG_KV.put(
               `user_state:${chatId}`,
               JSON.stringify({
@@ -115,7 +178,6 @@ export default {
               { expirationTtl: 3600 }
             );
 
-            // Ask the user to copy/paste the JD
             const promptMsg = [
               `📋 <b>لطفاً متن شرح شغل (Job Description) را ارسال کنید:</b>`,
               ``,
@@ -123,7 +185,7 @@ export default {
               ``,
               `متن شرح شغل، نیازمندی‌ها و مهارت‌های خواسته‌شده (Requirements / Stack) را از صفحه آگهی کپی کرده و <b>همینجا در چت پیست نمایید</b>.`,
               ``,
-              `🤖 <i>به محض دریافت متن، هوش مصنوعی رزومه مادر شما را اختصاصاً متناسب با نیازمندی‌های این پوزیشن بازنویسی کرده و فایل Word (.docx) استاندارد ATS را تحویل می‌دهد.</i>`,
+              `🤖 <i>به محض دریافت متن، هوش مصنوعی رزومه مادر شما را اختصاصاً متناسب با نیازمندی‌های این پوزیشن بازنویسی کرده و فایل PDF استاندارد ATS را تحویل می‌دهد.</i>`,
             ].join('\n');
 
             await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, promptMsg);
