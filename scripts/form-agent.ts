@@ -26,13 +26,27 @@ export async function runFormAgent(options: {
 
   const browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+    ],
   });
 
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 900 },
+    locale: 'en-US',
+    timezoneId: 'Europe/Istanbul',
+  });
+
+  // Stealth: Mask navigator.webdriver
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => undefined,
+    });
   });
 
   const page = await context.newPage();
@@ -43,21 +57,41 @@ export async function runFormAgent(options: {
 
     const pageTitle = (await page.title()) || 'Software Engineer';
 
-    // Check for CAPTCHA / Security Block / Access Denied
-    const captchaDetected = await page.evaluate(() => {
-      const text = document.body?.innerText || '';
-      const hasCaptcha = !!document.querySelector(
-        'iframe[src*="captcha"], iframe[src*="turnstile"], iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .g-recaptcha, .h-captcha'
-      );
-      const isBlocked =
-        /verify you are human|security check|cloudflare challenge|bot detection|access denied|attention required/i.test(
-          text
-        );
-      return hasCaptcha || isBlocked;
-    });
+    // 1. If page has an "Apply" button that expands or navigates to the form, click it
+    try {
+      const applyTrigger = page
+        .locator('button:has-text("Apply"), a:has-text("Apply for this job"), a:has-text("Apply"), a[href*="#apply"]')
+        .first();
+      if ((await applyTrigger.count()) > 0 && (await applyTrigger.isVisible())) {
+        console.log('[FormAgent] Clicking Apply trigger to open application form...');
+        await applyTrigger.click();
+        await page.waitForTimeout(2000);
+      }
+    } catch {}
 
-    if (captchaDetected) {
-      console.warn('[FormAgent] Security block / CAPTCHA detected!');
+    // 2. Try to automatically solve Cloudflare Turnstile / Checkbox if present
+    try {
+      for (const frame of page.frames()) {
+        const frameUrl = frame.url();
+        if (frameUrl.includes('turnstile') || frameUrl.includes('cloudflare') || frameUrl.includes('recaptcha')) {
+          const cb = frame.locator('input[type="checkbox"], .ctp-checkbox-label, #challenge-stage input');
+          if ((await cb.count()) > 0) {
+            console.log('[FormAgent] Detected interactive security checkbox. Clicking to solve...');
+            await cb.first().click();
+            await page.waitForTimeout(3500);
+          }
+        }
+      }
+    } catch {}
+
+    // 3. Check if page is an absolute hard blocker (e.g. Cloudflare "Just a moment..." with no content)
+    const isHardBlock =
+      pageTitle.includes('Just a moment...') ||
+      pageTitle.includes('Attention Required') ||
+      pageTitle.includes('Access Denied');
+
+    if (isHardBlock) {
+      console.warn('[FormAgent] Hard security block detected!');
       const captchaImg = '.tmp/captcha-blocked.png';
       await page.screenshot({ path: captchaImg });
       if (botToken && chatId) {
@@ -65,10 +99,10 @@ export async function runFormAgent(options: {
           botToken,
           chatId,
           captchaImg,
-          `⚠️ <b>سیستم امنیتی (CAPTCHA) در صفحه مقصد شناسایی شد!</b>\n\n💼 <b>پوزیشن:</b> ${pageTitle}\n🔗 <b>لینک صفحه:</b> ${url}\n\n<i>ربات نمی‌تواند از تست انسان عبور کند. لطفاً لینک بالا را باز کرده و مستقیماً فرم را تکمیل فرمایید.</i>`
+          `⚠️ <b>سیستم امنیتی (Cloudflare Challenge) در صفحه مقصد شناسایی شد!</b>\n\n💼 <b>پوزیشن:</b> ${pageTitle}\n🔗 <b>لینک صفحه:</b> ${url}\n\n<i>برای این مورد، لطفاً لینک بالا را باز کرده و فرم را تکمیل نمایید.</i>`
         );
       }
-      return { success: false, error: 'CAPTCHA detected' };
+      return { success: false, error: 'Hard security block' };
     }
 
     // 1. Extract Page Title / Job Description for Tailoring
