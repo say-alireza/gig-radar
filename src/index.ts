@@ -1,4 +1,6 @@
-import { fetchLinkedInContractJobs, GigLead, fetchLinkedInJobDescription } from './sources/linkedin';
+import { GigLead } from './sources/linkedin';
+import { fetchWWRLeads } from './sources/weworkremotely';
+import { fetchRemoteOKLeads } from './sources/remoteok';
 import { fetchHNContractLeads } from './sources/hackernews';
 import {
   sendLeadToTelegram,
@@ -522,10 +524,6 @@ function escapeHtml(text: string): string {
 }
 
 async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
-  const keywords = overrideKw
-    ? [overrideKw]
-    : ['React', 'Django', 'Next.js'];
-
   const stats = {
     checked: 0,
     accepted: 0,
@@ -534,24 +532,31 @@ async function scanAndNotify(env: Env, force = false, overrideKw?: string) {
   };
 
   const allLeads: GigLead[] = [];
-  const debugErrors: any[] = [];
 
-  for (const kw of keywords) {
-    const res = await fetchLinkedInContractJobs(kw);
-    if (res.leads.length > 0) {
-      allLeads.push(...res.leads);
-    } else {
-      debugErrors.push({ kw, status: res.status, err: res.err });
-    }
-    await new Promise((r) => setTimeout(r, 1000));
+  // 1. WeWorkRemotely (Zero-login, direct ATS applications)
+  try {
+    const wwr = await fetchWWRLeads();
+    allLeads.push(...wwr);
+  } catch (e) {
+    console.error('WWR scan error:', e);
   }
 
-  // Backup: HN Contract only if LinkedIn has 0
-  if (allLeads.length === 0) {
+  // 2. RemoteOK (Zero-login, React & Python contract gigs)
+  try {
+    const remoteok = await fetchRemoteOKLeads(overrideKw || 'react');
+    allLeads.push(...remoteok);
+  } catch (e) {
+    console.error('RemoteOK scan error:', e);
+  }
+
+  // 3. HackerNews (Direct founder emails)
+  try {
     for (const kw of ['React', 'Django']) {
-      const hnLeads = await fetchHNContractLeads(kw);
-      allLeads.push(...hnLeads);
+      const hn = await fetchHNContractLeads(kw);
+      allLeads.push(...hn);
     }
+  } catch (e) {
+    console.error('HN scan error:', e);
   }
 
   stats.checked = allLeads.length;
@@ -610,12 +615,14 @@ HUMANIZER RULES:
   // Update live status dashboard on Telegram
   const targetChatId = env.TELEGRAM_CHAT_ID || '96092687';
   if (env.TELEGRAM_BOT_TOKEN) {
-    const liErr = debugErrors.find((e) => e.kw === 'React');
-    const liStatus = liErr ? `${liErr.status || 'Err'}` : '200 OK';
     const sourceStats: Record<string, { count: number; status: string }> = {
-      LinkedIn: {
-        count: stats.sources['LinkedIn'] || 0,
-        status: liStatus,
+      WeWorkRemotely: {
+        count: stats.sources['WeWorkRemotely'] || 0,
+        status: '200 OK',
+      },
+      RemoteOK: {
+        count: stats.sources['RemoteOK'] || 0,
+        status: '200 OK',
       },
       HackerNews: {
         count: stats.sources['HackerNews'] || 0,
@@ -630,5 +637,5 @@ HUMANIZER RULES:
     });
   }
 
-  return { ...stats, debugErrors };
+  return stats;
 }
