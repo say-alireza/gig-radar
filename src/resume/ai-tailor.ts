@@ -55,11 +55,11 @@ ${JSON.stringify(
 ### TARGET JOB DESCRIPTION:
 ${jd.slice(0, 3500)}
 
-### INSTRUCTIONS:
+### INSTRUCTIONS (STRICT SINGLE-PAGE ATS RESUME):
 1. "headline": Create a targeted professional headline aligning the candidate's core stack (React, Next.js, Django, TypeScript, Tailwind) with the target job title.
-2. "summary": Write an impactful 3-4 sentence Professional Summary. Highlight candidate's actual projects (EPD Community, PIMS, GameHub) and relevant stack to directly address the JD requirements.
-3. "experience": For each company (exp_epd, exp_pims, exp_intern, exp_freelance), select the top 3-4 most relevant achievement bullets. You MAY rephrase bullets to emphasize matching technologies, but DO NOT invent fake companies, dates, or metrics.
-4. "projects": Select the 2-3 most relevant projects that showcase the skills needed in the JD, with 2-3 tailored bullets each.
+2. "summary": Write an impactful 2-3 sentence Professional Summary tailored specifically to the JD's core problems.
+3. "experience": The entire resume MUST fit on ONE SINGLE PAGE. Select ONLY 2-3 impactful bullets for exp_epd, 2 bullets for exp_pims, and 1-2 bullets for exp_intern. Rephrase bullets to naturally incorporate keywords from the JD without inventing fake claims.
+4. "projects": Select ONLY the top 2 most relevant projects that demonstrate the required stack, with 1-2 concise bullets each.
 5. "skills": Reorder skill items in each category so that skills mentioned in the JD appear first.
 
 Respond ONLY with valid JSON in this exact structure:
@@ -98,7 +98,7 @@ Respond ONLY with valid JSON in this exact structure:
 }`;
 
   try {
-    const response: any = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+    const response: any = await ai.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
       messages: [
         {
           role: 'system',

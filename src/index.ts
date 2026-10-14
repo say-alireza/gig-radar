@@ -47,6 +47,22 @@ export default {
       });
     }
 
+    if (url.pathname === '/test-ai') {
+      try {
+        const response: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
+          messages: [{ role: 'user', content: 'Say hello in 5 words' }],
+        });
+        return new Response(JSON.stringify({ ok: true, response }, null, 2), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({ ok: false, error: err?.message || String(err), stack: err?.stack }, null, 2),
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     if (url.pathname === '/set-webhook') {
       const webhookUrl = url.origin;
       const res = await fetch(

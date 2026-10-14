@@ -155,19 +155,18 @@ function body(r: ResumeDoc): string {
   const out: string[] = [];
   const h = (r && r.header) || ({} as any);
 
-  out.push(para(run(h.name || 'Candidate', { bold: true, size: 18 }), { after: 30 }));
-  if (h.headline) out.push(para(run(h.headline, { size: 11 }), { after: 20 }));
-  if (h.location) out.push(para(run(h.location, { size: 10, color: MUTED_COLOR }), { after: 10 }));
+  out.push(para(run(h.name || 'Alireza Rahimpanah', { bold: true, size: 16 }), { after: 10 }));
+  if (h.headline) out.push(para(run(h.headline, { bold: true, size: 10, color: ACCENT_COLOR }), { after: 10 }));
 
-  const contacts = cleanList([h.email, h.phone, h.website, h.github, h.linkedin, h.telegram]);
-  if (contacts.length) out.push(para(run(contacts.join(' | '), { size: 10, color: MUTED_COLOR }), { after: 120 }));
+  const contacts = cleanList([h.location, h.email, h.website, h.github, h.linkedin, h.telegram]);
+  if (contacts.length) out.push(para(run(contacts.join(' | '), { size: 9, color: MUTED_COLOR }), { after: 40 }));
 
   const heading = (label: string) =>
-    para(run(label, { bold: true, size: 12, color: ACCENT_COLOR }), { before: 140, after: 60 });
+    para(run(label, { bold: true, size: 10.5, color: ACCENT_COLOR }), { before: 40, after: 15 });
 
   if (r && r.summary) {
     out.push(heading(HEADERS.summary));
-    out.push(para(run(r.summary, { size: 11 }), { after: 60 }));
+    out.push(para(run(r.summary, { size: 9.5 }), { after: 20 }));
   }
 
   const skills = Array.isArray(r && r.skills) ? r.skills : [];
@@ -177,8 +176,8 @@ function body(r: ResumeDoc): string {
       const items = cleanList(g && g.items);
       if (!items.length) continue;
       out.push(
-        para(run(String((g && g.category) || 'Skills') + ': ', { bold: true, size: 11 }) + run(items.join(', '), { size: 11 }), {
-          after: 20,
+        para(run(String((g && g.category) || 'Skills') + ': ', { bold: true, size: 9.5 }) + run(items.join(', '), { size: 9.5 }), {
+          after: 8,
         })
       );
     }
@@ -193,33 +192,33 @@ function body(r: ResumeDoc): string {
       const meta = [e && e.location, years].filter(Boolean).join(' | ');
       out.push(
         para(
-          run(title, { bold: true, size: 11 }) + (meta ? run('  ' + meta, { size: 10, color: MUTED_COLOR }) : ''),
-          { before: 80, after: 20 }
+          run(title, { bold: true, size: 9.5 }) + (meta ? run('   ' + meta, { size: 9, color: MUTED_COLOR }) : ''),
+          { before: 20, after: 8 }
         )
       );
       const stack = cleanList(e && e.stack);
-      if (stack.length) out.push(para(run('Tech: ' + stack.join(', '), { size: 10, color: MUTED_COLOR }), { after: 10 }));
+      if (stack.length) out.push(para(run('Tech: ' + stack.join(', '), { size: 8.5, color: MUTED_COLOR }), { after: 5 }));
       for (const b of (e && e.bullets) || []) {
         const t = typeof b === 'string' ? b : b && b.text;
-        if (t) out.push(para(run('- ' + t, { size: 11 }), { after: 10 }));
+        if (t) out.push(para(run('- ' + t, { size: 9.5 }), { after: 5 }));
       }
     }
   }
 
-  const proj = Array.isArray(r && r.projects) ? r.projects : [];
+  const proj = Array.isArray(r && r.projects) ? r.projects.slice(0, 2) : [];
   if (proj.length) {
     out.push(heading(HEADERS.projects));
     for (const p of proj) {
       const stack = cleanList(p && p.stack).join(', ');
       out.push(
-        para(run(String((p && p.name) || '') + (stack ? ' | ' + stack : ''), { bold: true, size: 11 }), {
-          before: 80,
-          after: 20,
+        para(run(String((p && p.name) || '') + (stack ? ' | ' + stack : ''), { bold: true, size: 9.5 }), {
+          before: 20,
+          after: 8,
         })
       );
       for (const b of (p && p.bullets) || []) {
         const t = typeof b === 'string' ? b : b && b.text;
-        if (t) out.push(para(run('- ' + t, { size: 11 }), { after: 10 }));
+        if (t) out.push(para(run('- ' + t, { size: 9.5 }), { after: 5 }));
       }
     }
   }
@@ -229,13 +228,13 @@ function body(r: ResumeDoc): string {
     out.push(heading(HEADERS.education));
     for (const d of edu) {
       out.push(
-        para(run([d && d.degree, d && d.school].filter(Boolean).join(' - '), { bold: true, size: 11 }), {
-          before: 60,
-          after: 10,
+        para(run([d && d.degree, d && d.school].filter(Boolean).join(' - '), { bold: true, size: 9.5 }), {
+          before: 15,
+          after: 5,
         })
       );
       const yrs = [d && d.start, d && d.end].filter(Boolean).join(' - ');
-      if (yrs) out.push(para(run(yrs, { size: 10, color: MUTED_COLOR }), { after: 20 }));
+      if (yrs) out.push(para(run(yrs, { size: 9, color: MUTED_COLOR }), { after: 10 }));
     }
   }
 
@@ -249,7 +248,7 @@ export function buildDocumentXml(r: ResumeDoc): string {
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
     body(r) +
     '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
-    '<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr>' +
+    '<w:pgMar w:top="500" w:right="600" w:bottom="500" w:left="600"/></w:sectPr>' +
     '</w:body></w:document>'
   );
 }
