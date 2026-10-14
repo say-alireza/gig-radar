@@ -85,10 +85,21 @@ export async function sendLeadToTelegram(
   }
 }
 
+export const MAIN_KEYBOARD = {
+  keyboard: [
+    [{ text: '🔍 اسکن موقعیت‌های جدید' }, { text: '📊 وضعیت رادار' }],
+    [{ text: '📝 ساخت رزومه از متن' }, { text: '🤖 اپلای خودکار با لینک' }],
+    [{ text: 'ℹ️ راهنما' }],
+  ],
+  resize_keyboard: true,
+  is_persistent: true,
+};
+
 export async function sendTelegramMessage(
   botToken: string,
   chatId: string | number,
-  text: string
+  text: string,
+  replyMarkup: any = MAIN_KEYBOARD
 ): Promise<boolean> {
   try {
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -98,6 +109,7 @@ export async function sendTelegramMessage(
         chat_id: chatId,
         text,
         parse_mode: 'HTML',
+        reply_markup: replyMarkup,
       }),
     });
     return res.ok;

@@ -238,7 +238,7 @@ export default {
         const text = update?.message?.text;
 
         if (chatId && text) {
-          // Check if user is replying to a "waiting_jd" request
+          // Check if user is replying to a state request (waiting_jd or waiting_apply_url)
           const stateRaw = await env.GIG_KV.get(`user_state:${chatId}`);
           if (stateRaw) {
             try {
@@ -248,36 +248,52 @@ export default {
                 await sendTelegramMessage(
                   env.TELEGRAM_BOT_TOKEN,
                   chatId,
-                  `⏳ <b>متن شرح شغل دریافت شد!</b>\nدر حال تحلیل نیازمندی‌ها و بازنویسی رزومه برای <b>${escapeHtml(state.title)} (${escapeHtml(state.company)})</b> با هوش مصنوعی...`
+                  `⏳ <b>متن شرح شغل دریافت شد!</b>\nدر حال تحلیل نیازمندی‌ها و بازنویسی رزومه برای <b>${escapeHtml(state.title || 'Custom Role')} (${escapeHtml(state.company || 'Contract')})</b> با هوش مصنوعی...`
                 );
                 ctx.waitUntil(
                   handleTailorWithJd(
                     env,
                     chatId,
                     text.trim(),
-                    state.title,
-                    state.company
+                    state.title || 'Custom Role',
+                    state.company || 'Contract'
                   )
                 );
+                return new Response('OK');
+              }
+
+              if (state?.action === 'waiting_apply_url') {
+                await env.GIG_KV.delete(`user_state:${chatId}`);
+                const targetUrl = text.trim();
+                if (!targetUrl.startsWith('http')) {
+                  await sendTelegramMessage(
+                    env.TELEGRAM_BOT_TOKEN,
+                    chatId,
+                    '❌ لطفاً یک لینک معتبر اینترنتی ارسال فرمایید (مثال: https://jobs.lever.co/...)'
+                  );
+                } else {
+                  await sendTelegramMessage(
+                    env.TELEGRAM_BOT_TOKEN,
+                    chatId,
+                    `⏳ <b>درخواست بررسی فرم دریافت شد!</b>\nدر حال اجرای ربات ابری Playwright برای اسکن فرم و پیش‌پر کردن فیلدها...`
+                  );
+                  ctx.waitUntil(triggerCloudAutoApply(env.GITHUB_TOKEN || '', targetUrl, 'inspect'));
+                }
                 return new Response('OK');
               }
             } catch {}
           }
 
-          if (text.startsWith('/start')) {
+          // Reply Keyboard & Slash Commands
+          if (text === '🔍 اسکن موقعیت‌های جدید' || text.startsWith('/scan')) {
             await sendTelegramMessage(
               env.TELEGRAM_BOT_TOKEN,
               chatId,
-              `🎯 <b>GigRadar Online!</b>\n\nI monitor LinkedIn & HackerNews for <b>100% Remote Contract Projects</b> matching your stack:\n• React & Next.js\n• Django & Python\n• Full-Stack MVPs\n\n💡 <b>دو روش ساخت رزومه اختصاصی:</b>\n1. روی دکمه <b>📝 ساخت رزومه اختصاصی</b> زیر هر آگهی بزنید؛ ربات از شما متن آگهی را می‌خواهد و رزومه متناسب می‌سازد.\n2. یا هر زمان <b>متن هر شرح شغل (JD)</b> را مستقیماً همینجا بفرستید تا هوش مصنوعی فوراً رزومه اختصاصی و فایل Word (.docx) برایتان تولید کند.\n\n/scan برای اسکن دستی | /status برای داشبورد زنده.`
-            );
-          } else if (text.startsWith('/scan')) {
-            await sendTelegramMessage(
-              env.TELEGRAM_BOT_TOKEN,
-              chatId,
-              `🔍 Scanning for fresh remote contract & freelance gigs...`
+              `🔍 در حال اسکن پلتفرم‌های ریموت (WWR, RemoteOK, HackerNews, Reddit)...`
             );
             ctx.waitUntil(scanAndNotify(env, true));
-          } else if (text.startsWith('/status')) {
+            return new Response('OK');
+          } else if (text === '📊 وضعیت رادار' || text.startsWith('/status')) {
             const targetChatId = env.TELEGRAM_CHAT_ID || String(chatId);
             ctx.waitUntil(
               updateTelegramDashboard(env.TELEGRAM_BOT_TOKEN, targetChatId, env.GIG_KV, {
@@ -289,6 +305,53 @@ export default {
                 totalSeen: 0,
               })
             );
+            return new Response('OK');
+          } else if (text === '📝 ساخت رزومه از متن') {
+            await env.GIG_KV.put(
+              `user_state:${chatId}`,
+              JSON.stringify({
+                action: 'waiting_jd',
+                title: 'Custom Role',
+                company: 'Contract',
+              }),
+              { expirationTtl: 3600 }
+            );
+            await sendTelegramMessage(
+              env.TELEGRAM_BOT_TOKEN,
+              chatId,
+              `📋 <b>لطفاً متن شرح شغل یا نیازمندی‌ها (Job Description) را همینجا بفرستید:</b>\n\n🤖 <i>هوش مصنوعی بلافاصله آن را تحلیل کرده و فایل PDF اختصاصی تک‌صفحه‌ای با نمره ATS 100 تولید می‌کند.</i>`
+            );
+            return new Response('OK');
+          } else if (text === '🤖 اپلای خودکار با لینک') {
+            await env.GIG_KV.put(
+              `user_state:${chatId}`,
+              JSON.stringify({
+                action: 'waiting_apply_url',
+              }),
+              { expirationTtl: 3600 }
+            );
+            await sendTelegramMessage(
+              env.TELEGRAM_BOT_TOKEN,
+              chatId,
+              `🤖 <b>لطفاً لینک فرم استخدام (Greenhouse، Lever، Ashby یا سایت شرکت) را بفرستید:</b>\n\nربات ابری Playwright فرم را باز کرده، فیلدها را پیش‌پر می‌کند، رزومه را پیوست کرده و اسکرین‌شات از فرم پرشده را برای تأییدتان ارسال می‌کند.`
+            );
+            return new Response('OK');
+          } else if (text === 'ℹ️ راهنما' || text.startsWith('/help') || text.startsWith('/start')) {
+            await sendTelegramMessage(
+              env.TELEGRAM_BOT_TOKEN,
+              chatId,
+              `🎯 <b>به ربات هوشمند رادار مشاغل دلاری (Contract Radar) خوش آمدید!</b>\n\n` +
+              `این ربات به صورت ۲۴ ساعته منابع معتبر بین‌المللی را برای قراردادهای ریموت دلاری رصد می‌کند:\n` +
+              `• <b>WeWorkRemotely & RemoteOK:</b> فرم‌های باز بدون نیاز به لاگین\n` +
+              `• <b>HackerNews (Who is Hiring):</b> ایمیل‌های مستقیم بنیان‌گذاران\n` +
+              `• <b>Reddit r/forhire:</b> قراردادهای سریع فریلنسری\n\n` +
+              `💡 <b>امکانات دکمه‌های پایین صفحه:</b>\n` +
+              `🔍 <b>اسکن موقعیت‌های جدید:</b> بررسی لحظه‌ای آگهی‌های تازه\n` +
+              `📊 <b>وضعیت رادار:</b> داشبورد زنده منابع\n` +
+              `📝 <b>ساخت رزومه از متن:</b> ارسال متن آگهی و دریافت فایل PDF اختصاصی\n` +
+              `🤖 <b>اپلای خودکار با لینک:</b> پر کردن خودکار فرم استخدام با ارسال لینک`
+            );
+            return new Response('OK');
           } else if (text.startsWith('/apply')) {
             const targetUrl = text.replace('/apply', '').trim();
             if (!targetUrl.startsWith('http')) {
