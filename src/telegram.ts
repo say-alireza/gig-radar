@@ -125,16 +125,20 @@ export async function sendResumeDocument(
   chatId: string | number,
   docBytes: Uint8Array,
   filename: string,
-  caption: string
-): Promise<boolean> {
+  caption?: string
+): Promise<{ ok: boolean; error?: string }> {
   const form = new FormData();
   form.append('chat_id', String(chatId));
   const fileBlob = new Blob([docBytes], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
   form.append('document', fileBlob, filename);
-  form.append('caption', caption);
-  form.append('parse_mode', 'HTML');
+  if (caption) {
+    // Strictly cap caption at 1000 characters to avoid Telegram 400 Bad Request
+    const safeCaption = caption.length > 1000 ? caption.slice(0, 997) + '...' : caption;
+    form.append('caption', safeCaption);
+    form.append('parse_mode', 'HTML');
+  }
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
@@ -142,14 +146,14 @@ export async function sendResumeDocument(
       body: form,
     });
     if (!res.ok) {
-      const err = await res.text();
-      console.error(`[Telegram] sendDocument failed: ${res.status} - ${err}`);
-      return false;
+      const errText = await res.text();
+      console.error(`[Telegram] sendDocument failed: ${res.status} - ${errText}`);
+      return { ok: false, error: `${res.status}: ${errText}` };
     }
-    return true;
-  } catch (err) {
+    return { ok: true };
+  } catch (err: any) {
     console.error(`[Telegram] sendDocument network error:`, err);
-    return false;
+    return { ok: false, error: err?.message || String(err) };
   }
 }
 

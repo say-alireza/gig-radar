@@ -257,7 +257,7 @@ async function handleTailorWithJd(
     const docxBytes = buildDocx(result.resume);
     const filename = resumeFilename(result.resume.header.name, targetCompany || 'Resume');
 
-    // 3. Format Report & Stats
+    // 3. Format Report & Send Report Message first
     const rep = result.report;
     const topKeywords = rep.matched.slice(0, 8).map((k) => k.display).join(', ');
     const gaps =
@@ -265,7 +265,7 @@ async function handleTailorWithJd(
         ? rep.gaps.slice(0, 5).map((g) => g.term).join(', ')
         : 'ندارد (تمام نیازمندی‌ها پوشش داده شد)';
 
-    const caption = [
+    const reportMsg = [
       `🎯 <b>رزومه اختصاصی شما آماده شد!</b>`,
       ``,
       `💼 <b>پوزیشن هدف:</b> ${escapeHtml(targetTitle || result.resume.header.headline)} (${escapeHtml(targetCompany)})`,
@@ -276,18 +276,28 @@ async function handleTailorWithJd(
       ``,
       `📝 <b>خلاصه شغلی بازنویسی‌شده برای این آگهی:</b>`,
       `<blockquote>${escapeHtml(result.resume.summary)}</blockquote>`,
-      ``,
-      `📄 <i>فایل ورد تک‌ستونه، سفارشی‌شده با هوش مصنوعی و بهینه‌سازی‌شده برای سیستم‌های ATS پیوست شد.</i>`,
     ].join('\n');
 
-    // 4. Deliver document
-    await sendResumeDocument(
+    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, reportMsg);
+
+    // 4. Deliver Word document with short safe caption
+    const docCaption = `📄 <b>رزومه تک‌صفحه‌ای اختصاصی (DOCX / استایل ATS)</b>`;
+    const docRes = await sendResumeDocument(
       env.TELEGRAM_BOT_TOKEN,
       chatId,
       docxBytes,
       filename,
-      caption
+      docCaption
     );
+
+    if (!docRes.ok) {
+      console.error('[sendResumeDocument] Delivery error:', docRes.error);
+      await sendTelegramMessage(
+        env.TELEGRAM_BOT_TOKEN,
+        chatId,
+        `❌ خطا در ارسال فایل سند به تلگرام: ${docRes.error}`
+      );
+    }
   } catch (err: any) {
     console.error('Tailor with JD failed:', err);
     await sendTelegramMessage(
