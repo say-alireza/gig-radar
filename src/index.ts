@@ -71,9 +71,43 @@ export default {
       });
     }
 
+    if (url.pathname === '/bot-me') {
+      const res = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`
+      );
+      const data = await res.json();
+      return new Response(JSON.stringify(data, null, 2), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.pathname === '/last-update') {
+      const last = await env.GIG_KV.get('last_update');
+      const err = await env.GIG_KV.get('last_error');
+      return new Response(
+        JSON.stringify({ lastUpdate: last ? JSON.parse(last) : null, lastError: err }, null, 2),
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (url.pathname === '/ping-me') {
+      const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: '96092687',
+          text: '🔔 <b>تست زنده ربات Contract Radar (@gigradar_dev_bot)</b>\nاگر این پیام را می‌بینید، ارتباط ربات با چت شما کاملاً برقرار است. لطفاً همین الان روی دکمه‌های زیر یا یک پیام متنی تست بزنید.',
+          parse_mode: 'HTML',
+        }),
+      });
+      const data = await res.json();
+      return new Response(JSON.stringify(data, null, 2), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (request.method === 'POST') {
       try {
         const update: any = await request.json();
+        ctx.waitUntil(env.GIG_KV.put('last_update', JSON.stringify(update, null, 2), { expirationTtl: 86400 }));
 
         // 1. Handle Callback Query
         if (update?.callback_query) {
