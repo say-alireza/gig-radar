@@ -111,6 +111,28 @@ export async function runFormAgent(options: {
 
     console.log(`[FormAgent] Page loaded: ${pageTitle}`);
 
+    // If on LinkedIn, try to find external company application link
+    if (url.includes('linkedin.com')) {
+      console.log('[FormAgent] Detected LinkedIn URL. Checking for external application link...');
+      try {
+        const extApplyBtn = page
+          .locator(
+            'a.apply-button, a[data-tracking-control-name*="apply"], a:has-text("Apply on company website"), a:has-text("Apply")'
+          )
+          .first();
+        if ((await extApplyBtn.count()) > 0) {
+          const extHref = await extApplyBtn.getAttribute('href');
+          if (extHref && extHref.startsWith('http') && !extHref.includes('linkedin.com/login')) {
+            console.log(`[FormAgent] Following external application link: ${extHref}`);
+            await page.goto(extHref, { waitUntil: 'domcontentloaded', timeout: 35000 });
+            await page.waitForTimeout(3000);
+          }
+        }
+      } catch (e) {
+        console.warn('[FormAgent] External link follow error:', e);
+      }
+    }
+
     // 2. Generate Tailored 1-Page PDF Resume based on the live page
     console.log('[FormAgent] Tailoring resume to job description...');
     const tailored = await tailorResume({ master: master as any, jd: jdText });
@@ -272,6 +294,41 @@ export async function runFormAgent(options: {
       await fileInputs.first().setInputFiles(pdfPath);
       filledFields.push('Resume: Alireza_Rahimpanah_Resume.pdf (Attached)');
     }
+
+    // STRICT VALIDATION: Did we actually fill a real job application form?
+    const hasEmail = filledFields.some((f) => f.startsWith('Email:'));
+    const hasResume = filledFields.some((f) => f.startsWith('Resume:'));
+    const hasName = filledFields.some((f) => f.startsWith('First Name:') || f.startsWith('Full Name:'));
+
+    const isRealApplicationForm = hasEmail || hasResume || (hasName && filledFields.length >= 2);
+
+    if (!isRealApplicationForm) {
+      console.warn('[FormAgent] No job application form found on page.');
+      const noFormPath = '.tmp/no-form.png';
+      await page.screenshot({ path: noFormPath });
+      if (botToken && chatId) {
+        const msg = [
+          `⚠️ <b>فرم استخدامی مستقیمی در این صفحه یافت نشد</b>`,
+          ``,
+          `💼 <b>عنوان:</b> ${pageTitle}`,
+          `🔗 <b>لینک:</b> ${url}`,
+          ``,
+          `<i>این صفحه تنها صفحه معرفی یا جستجوی آگهی است (نه فرم ثبت‌نام).</i>`,
+          `<i>برای آگهی‌های لینکدین، لطفاً از دکمه 🚀 Open on LinkedIn استفاده کنید، یا در صورت وجود فرم در سایت شرکت، لینک مستقیم فرم را با دستور <code>/apply &lt;url&gt;</code> بفرستید.</i>`,
+        ].join('\n');
+        await sendPhotoToTelegram(botToken, chatId, noFormPath, msg);
+      }
+      return { success: false, error: 'No application form found' };
+    }
+
+    // Scroll to the filled form container so the screenshot shows the actual filled form!
+    try {
+      const formEl = page.locator('form, input[type="file"], input[type="email"], input[name*="name"]').first();
+      if ((await formEl.count()) > 0) {
+        await formEl.scrollIntoViewIfNeeded();
+      }
+    } catch {}
+    await page.waitForTimeout(1000);
 
     // 5. Take Screenshot of Filled Form
     const screenshotPath = '.tmp/form-preview.png';
