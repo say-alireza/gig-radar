@@ -1,5 +1,5 @@
 import { chromium, Page } from 'playwright';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import master from '../resume/master.json';
 import { tailorResume } from '../src/resume/tailor';
 import { buildPdf } from '../src/resume/pdf';
@@ -335,10 +335,14 @@ async function sendPhotoToTelegram(
   form.append('parse_mode', 'HTML');
 
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
       method: 'POST',
       body: form,
     });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[sendPhotoToTelegram] Telegram error:', err);
+    }
   } catch (e) {
     console.error('[sendPhotoToTelegram] Error:', e);
   }
