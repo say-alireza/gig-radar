@@ -136,16 +136,22 @@ export default {
                 const leadObj = JSON.parse(raw);
                 leadTitle = leadObj.title || leadTitle;
                 leadCompany = leadObj.company || leadCompany;
-                if (leadObj.description && leadObj.description.length > 100) {
+                if (leadObj.description && leadObj.description.length > 150) {
                   autoDesc = leadObj.description;
-                } else if (leadObj.snippet && leadObj.snippet.length > 100) {
+                } else if (leadObj.snippet && leadObj.snippet.length > 150) {
                   autoDesc = leadObj.snippet;
                 }
               } catch {}
             }
 
-            // If Job Description was automatically extracted, generate PDF immediately!
-            if (autoDesc) {
+            // Check if extracted description is substantial (not just a 1-line title)
+            const isSubstantialJd =
+              autoDesc &&
+              autoDesc.trim().length >= 180 &&
+              !autoDesc.trim().endsWith('(Remote Contract Gig)');
+
+            // If Job Description was automatically extracted with real content, generate PDF immediately!
+            if (isSubstantialJd) {
               await answerCallbackQuery(
                 env.TELEGRAM_BOT_TOKEN,
                 cb.id,
@@ -154,17 +160,17 @@ export default {
               await sendTelegramMessage(
                 env.TELEGRAM_BOT_TOKEN,
                 chatId,
-                `⏳ <b>شرح شغل به صورت خودکار استخراج شد!</b>\nدر حال تحلیل نیازمندی‌ها و بازنویسی رزومه PDF برای <b>${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)})</b> با هوش مصنوعی...`
+                `⏳ <b>شرح شغل با موفقیت دریافت شد (${autoDesc.length} کاراکتر)</b>\nدر حال تحلیل نیازمندی‌ها و ساخت رزومه PDF اختصاصی برای <b>${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)})</b> با هوش مصنوعی...`
               );
               ctx.waitUntil(handleTailorWithJd(env, chatId, autoDesc, leadTitle, leadCompany));
               return new Response('OK');
             }
 
-            // Fallback: If description wasn't pre-extracted, ask the user to paste it
+            // Fallback: If LinkedIn blocked the text or description was too short, notify user clearly
             await answerCallbackQuery(
               env.TELEGRAM_BOT_TOKEN,
               cb.id,
-              '📋 لطفاً شرح شغل را بفرستید...'
+              '⚠️ شرح شغل خودکار در دسترس نیست'
             );
 
             await env.GIG_KV.put(
@@ -179,13 +185,13 @@ export default {
             );
 
             const promptMsg = [
-              `📋 <b>لطفاً متن شرح شغل (Job Description) را ارسال کنید:</b>`,
+              `⚠️ <b>امکان استخراج خودکار شرح شغل از این آگهی وجود نداشت</b>`,
+              `<i>(لینکدین به دلیل لاگین اجباری یا Rate Limit، متن کامل این آگهی را مسدود کرده است).</i>`,
               ``,
-              `💼 <b>پوزیشن انتخاب‌شده:</b> ${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)})`,
+              `📋 <b>لطفاً بخش نیازمندی‌های این پوزیشن (Requirements / Stack) را کپی کرده و همینجا پیست کنید:</b>`,
+              `💼 <b>پوزیشن:</b> ${escapeHtml(leadTitle)} (${escapeHtml(leadCompany)})`,
               ``,
-              `متن شرح شغل، نیازمندی‌ها و مهارت‌های خواسته‌شده (Requirements / Stack) را از صفحه آگهی کپی کرده و <b>همینجا در چت پیست نمایید</b>.`,
-              ``,
-              `🤖 <i>به محض دریافت متن، هوش مصنوعی رزومه مادر شما را اختصاصاً متناسب با نیازمندی‌های این پوزیشن بازنویسی کرده و فایل PDF استاندارد ATS را تحویل می‌دهد.</i>`,
+              `🤖 <i>به محض ارسال متن، هوش مصنوعی رزومه شما را دقیقاً متناسب با آن بازنویسی کرده و فایل PDF تک‌صفحه‌ای تحویل می‌دهد.</i>`,
             ].join('\n');
 
             await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, promptMsg);

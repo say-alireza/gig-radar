@@ -41,8 +41,37 @@ export async function runFormAgent(options: {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
     await page.waitForTimeout(3000);
 
-    // 1. Extract Page Title / Job Description for Tailoring
     const pageTitle = (await page.title()) || 'Software Engineer';
+
+    // Check for CAPTCHA / Security Block / Access Denied
+    const captchaDetected = await page.evaluate(() => {
+      const text = document.body?.innerText || '';
+      const hasCaptcha = !!document.querySelector(
+        'iframe[src*="captcha"], iframe[src*="turnstile"], iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .g-recaptcha, .h-captcha'
+      );
+      const isBlocked =
+        /verify you are human|security check|cloudflare challenge|bot detection|access denied|attention required/i.test(
+          text
+        );
+      return hasCaptcha || isBlocked;
+    });
+
+    if (captchaDetected) {
+      console.warn('[FormAgent] Security block / CAPTCHA detected!');
+      const captchaImg = '.tmp/captcha-blocked.png';
+      await page.screenshot({ path: captchaImg });
+      if (botToken && chatId) {
+        await sendPhotoToTelegram(
+          botToken,
+          chatId,
+          captchaImg,
+          `⚠️ <b>سیستم امنیتی (CAPTCHA) در صفحه مقصد شناسایی شد!</b>\n\n💼 <b>پوزیشن:</b> ${pageTitle}\n🔗 <b>لینک صفحه:</b> ${url}\n\n<i>ربات نمی‌تواند از تست انسان عبور کند. لطفاً لینک بالا را باز کرده و مستقیماً فرم را تکمیل فرمایید.</i>`
+        );
+      }
+      return { success: false, error: 'CAPTCHA detected' };
+    }
+
+    // 1. Extract Page Title / Job Description for Tailoring
     const bodyText = (await page.innerText('body')) || '';
     const jdText = bodyText.slice(0, 4000);
 
