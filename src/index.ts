@@ -19,6 +19,7 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
   SEARCH_KEYWORDS?: string;
+  GITHUB_TOKEN?: string;
 }
 
 export default {
@@ -186,6 +187,40 @@ export default {
                 totalSeen: 0,
               })
             );
+          } else if (text.startsWith('/apply')) {
+            const targetUrl = text.replace('/apply', '').trim();
+            if (!targetUrl.startsWith('http')) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                'لطفاً لینک آگهی را بعد از دستور وارد کنید:\nمثال: <code>/apply https://jobs.lever.co/...</code>'
+              );
+            } else {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                `⏳ <b>درخواست بررسی فرم دریافت شد!</b>\nدر حال اجرای ربات ابری Playwright برای اسکن فرم و پیش‌پر کردن فیلدها...`
+              );
+              ctx.waitUntil(triggerCloudAutoApply(env.GITHUB_TOKEN || '', targetUrl, 'inspect'));
+            }
+            return new Response('OK');
+          } else if (text.startsWith('/submit')) {
+            const targetUrl = text.replace('/submit', '').trim();
+            if (!targetUrl.startsWith('http')) {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                'لطفاً لینک آگهی را بعد از دستور وارد کنید:\nمثال: <code>/submit https://jobs.lever.co/...</code>'
+              );
+            } else {
+              await sendTelegramMessage(
+                env.TELEGRAM_BOT_TOKEN,
+                chatId,
+                `🚀 <b>درخواست سابمیت نهایی فرم ارسال شد!</b>\nربات در حال تکمیل فیلدها، اتچ رزومه و ارسال فرم است...`
+              );
+              ctx.waitUntil(triggerCloudAutoApply(env.GITHUB_TOKEN || '', targetUrl, 'submit'));
+            }
+            return new Response('OK');
           } else {
             // User pasted a Job Description directly without clicking a button first
             if (text.trim().length >= 30) {
@@ -279,6 +314,38 @@ async function handleTailorWithJd(
       chatId,
       `❌ خطا در ساخت رزومه: ${err?.message || String(err)}`
     );
+  }
+}
+
+async function triggerCloudAutoApply(
+  githubToken: string,
+  url: string,
+  mode: 'inspect' | 'submit'
+): Promise<boolean> {
+  if (!githubToken) {
+    console.error('triggerCloudAutoApply: missing GITHUB_TOKEN');
+    return false;
+  }
+  try {
+    const res = await fetch(
+      'https://api.github.com/repos/say-alireza/gig-radar/actions/workflows/auto_apply.yml/dispatches',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'GigRadar-Worker',
+        },
+        body: JSON.stringify({
+          ref: 'main',
+          inputs: { url, mode },
+        }),
+      }
+    );
+    return res.status === 204;
+  } catch (err) {
+    console.error('triggerCloudAutoApply error:', err);
+    return false;
   }
 }
 

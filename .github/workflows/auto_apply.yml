@@ -1,0 +1,37 @@
+name: Cloud Auto Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Job Application URL'
+        required: true
+      mode:
+        description: 'Execution mode (inspect or submit)'
+        required: true
+        default: 'inspect'
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+
+      - name: Run Form Agent
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          npx tsx scripts/form-agent.ts --url "${{ github.event.inputs.url }}" --mode "${{ github.event.inputs.mode }}"
