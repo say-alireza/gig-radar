@@ -82,37 +82,38 @@ export async function runFormAgent(options: {
           const targetUrl = new URL(rawHref, page.url()).toString();
           console.log(`[FormAgent] Directly navigating to application portal: ${targetUrl}`);
           await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-          await page.waitForTimeout(3000);
+          await page.waitForTimeout(2000);
 
-          // If on an intermediary redirect (e.g. RemoteOK /l/ affiliate redirect), wait for destination
-          if (page.url().includes('/l/')) {
-            console.log('[FormAgent] Resolving intermediary redirect to final company application page...');
-            try {
-              await page.waitForURL((u) => !u.toString().includes('/l/'), { timeout: 10000 });
-              await page.waitForLoadState('domcontentloaded');
-              await page.waitForTimeout(3000);
-            } catch {
-              // Fallback: check if the page has a decoded destination script
-              const destUrl = await page.evaluate(() => {
-                const scripts = Array.from(document.querySelectorAll('script'));
-                for (const s of scripts) {
-                  const m = s.textContent?.match(/n='([^']+)'/);
-                  if (m && s.textContent?.includes('window.location.href=n')) {
+          // If on an intermediary redirect (e.g. RemoteOK /l/ affiliate redirect), decode rh token
+          if (rawHref.includes('/l/') || page.url().includes('/l/')) {
+            console.log('[FormAgent] Decoding RemoteOK obfuscated destination URL...');
+            const destUrl = await page.evaluate(() => {
+              const scripts = Array.from(document.querySelectorAll('script'));
+              for (const s of scripts) {
+                const text = s.textContent || '';
+                if (text.includes('window.location.href=n')) {
+                  const m = text.match(/n='([^']+)'/);
+                  if (m) {
                     try {
                       let n = m[1];
-                      n = n.split('MTc5MjA1NDQ4Mw==')[1];
-                      n = atob(atob(n.split('').reverse().join('')).split('').reverse().join('').split('MTc5MjA1NDQ4Mw==')[1]);
-                      return n.split('MTc5MjA1NDQ4Mw==')[1];
+                      const parts = n.split('MTc5MjA1NDQ4Mw==');
+                      if (parts.length > 1) {
+                        n = parts[1];
+                        n = atob(atob(n.split('').reverse().join('')).split('').reverse().join('').split('MTc5MjA1NDQ4Mw==')[1]);
+                        const rhPath = n.split('MTc5MjA1NDQ4Mw==')[1];
+                        return new URL(rhPath, window.location.href).toString();
+                      }
                     } catch {}
                   }
                 }
-                return null;
-              });
-              if (destUrl && destUrl.startsWith('http')) {
-                console.log(`[FormAgent] Decoded destination URL: ${destUrl}`);
-                await page.goto(destUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-                await page.waitForTimeout(3000);
               }
+              return null;
+            });
+
+            if (destUrl && destUrl.startsWith('http')) {
+              console.log(`[FormAgent] Following decoded destination URL: ${destUrl}`);
+              await page.goto(destUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+              await page.waitForTimeout(4000);
             }
           }
           console.log(`[FormAgent] Landed on application page: ${page.url()}`);
