@@ -126,6 +126,19 @@ export async function runFormAgent(options: {
     // Refresh pageTitle after navigation
     const pageTitle = (await page.title()) || 'Software Engineer';
 
+    // If aggregator requires registration or login to view application details
+    if (page.url().includes('register') || page.url().includes('login') || page.url().includes('job-seekers/account')) {
+      console.warn('[FormAgent] Registration/Login required on aggregator platform.');
+      if (botToken && chatId) {
+        await sendTelegramMessage(
+          botToken,
+          chatId,
+          `⚠️ <b>مشاهده فرم این موقعیت نیازمند ثبت‌نام در سایت واسط است:</b>\n\n💼 <b>پوزیشن:</b> ${pageTitle}\n🔗 <b>لینک:</b> ${url}\n\n<i>سایت واسط برای نمایش دکمه اپلای ثبت‌نام می‌خواهد. لطفاً لینک بالا را باز کرده یا از رزومه PDF تولیدشده استفاده فرمایید.</i>`
+        );
+      }
+      return { success: false, error: 'Registration required' };
+    }
+
     // 2. Try to automatically solve Cloudflare Turnstile / Checkbox if present
     try {
       for (const frame of page.frames()) {
@@ -477,35 +490,42 @@ async function sendPhotoToTelegram(
 ) {
   if (!existsSync(filePath)) return;
   const fileBytes = readFileSync(filePath);
-  const form = new FormData();
-  form.append('chat_id', chatId);
-  form.append('photo', new Blob([fileBytes], { type: 'image/png' }), 'preview.png');
-  form.append('caption', caption.slice(0, 1000));
-  form.append('parse_mode', 'HTML');
 
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-      method: 'POST',
-      body: form,
-    });
-    if (!res.ok) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const form = new FormData();
+      form.append('chat_id', chatId);
+      form.append('photo', new Blob([fileBytes], { type: 'image/png' }), 'preview.png');
+      form.append('caption', caption.slice(0, 1000));
+      form.append('parse_mode', 'HTML');
+
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+        method: 'POST',
+        body: form,
+      });
+      if (res.ok) return;
       const err = await res.text();
-      console.error('[sendPhotoToTelegram] Telegram error:', err);
+      console.error(`[sendPhotoToTelegram] Attempt ${attempt} error:`, err);
+    } catch (e) {
+      console.error(`[sendPhotoToTelegram] Attempt ${attempt} network exception:`, e);
+      await new Promise((r) => setTimeout(r, 2000));
     }
-  } catch (e) {
-    console.error('[sendPhotoToTelegram] Error:', e);
   }
 }
 
 async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
-  try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-    });
-  } catch (e) {
-    console.error('[sendTelegramMessage] Error:', e);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      });
+      if (res.ok) return;
+    } catch (e) {
+      console.error(`[sendTelegramMessage] Attempt ${attempt} error:`, e);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
 }
 
