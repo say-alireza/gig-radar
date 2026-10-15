@@ -62,12 +62,13 @@ export async function runFormAgent(options: {
           'a#job-cta-alt, a.action-apply, a.apply, a:has-text("Apply for this position"), a:has-text("Apply for this job"), a:has-text("Apply now"), button:has-text("Apply"), a[href*="/l/"], a[href*="apply"]'
         )
         .first();
-      if ((await applyTrigger.count()) > 0) {
-        const href = await applyTrigger.getAttribute('href');
-        console.log(`[FormAgent] Found Apply link with href: ${href}`);
 
-        if (href && href.startsWith('mailto:')) {
-          const directEmail = href.replace('mailto:', '').split('?')[0].trim();
+      if ((await applyTrigger.count()) > 0) {
+        const rawHref = await applyTrigger.getAttribute('href');
+        console.log(`[FormAgent] Found Apply link with href: ${rawHref}`);
+
+        if (rawHref && rawHref.startsWith('mailto:')) {
+          const directEmail = rawHref.replace('mailto:', '').split('?')[0].trim();
           console.log(`[FormAgent] Direct application email found: ${directEmail}`);
           if (botToken && chatId) {
             await sendTelegramMessage(
@@ -77,30 +78,44 @@ export async function runFormAgent(options: {
             );
           }
           return { success: true };
-        } else if (href && href.startsWith('http') && !href.includes('weworkremotely.com/remote-jobs') && !href.includes('remoteok.com/remote-jobs')) {
-          console.log(`[FormAgent] Navigating to external application portal: ${href}`);
-          await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 35000 });
+        } else if (rawHref) {
+          const targetUrl = new URL(rawHref, page.url()).toString();
+          console.log(`[FormAgent] Directly navigating to application portal: ${targetUrl}`);
+          await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
           await page.waitForTimeout(3000);
-        } else {
-          // Listen for new tab popup
-          const [popup] = await Promise.all([
-            context.waitForEvent('page', { timeout: 6000 }).catch(() => null),
-            applyTrigger.click({ timeout: 4000 }).catch(() => null),
-          ]);
-          if (popup) {
-            console.log('[FormAgent] Switched active tab to application popup');
-            page = popup;
-            await page.waitForLoadState('domcontentloaded');
-            // If the popup is on an intermediary redirect (e.g. RemoteOK /l/ or affiliate link), wait for the final landing page
+
+          // If on an intermediary redirect (e.g. RemoteOK /l/ affiliate redirect), wait for destination
+          if (page.url().includes('/l/')) {
+            console.log('[FormAgent] Resolving intermediary redirect to final company application page...');
             try {
-              if (page.url().includes('/l/')) {
-                console.log('[FormAgent] Waiting for intermediary redirect to settle...');
-                await page.waitForURL((u) => !u.toString().includes('/l/'), { timeout: 10000 });
-                await page.waitForLoadState('domcontentloaded');
+              await page.waitForURL((u) => !u.toString().includes('/l/'), { timeout: 10000 });
+              await page.waitForLoadState('domcontentloaded');
+              await page.waitForTimeout(3000);
+            } catch {
+              // Fallback: check if the page has a decoded destination script
+              const destUrl = await page.evaluate(() => {
+                const scripts = Array.from(document.querySelectorAll('script'));
+                for (const s of scripts) {
+                  const m = s.textContent?.match(/n='([^']+)'/);
+                  if (m && s.textContent?.includes('window.location.href=n')) {
+                    try {
+                      let n = m[1];
+                      n = n.split('MTc5MjA1NDQ4Mw==')[1];
+                      n = atob(atob(n.split('').reverse().join('')).split('').reverse().join('').split('MTc5MjA1NDQ4Mw==')[1]);
+                      return n.split('MTc5MjA1NDQ4Mw==')[1];
+                    } catch {}
+                  }
+                }
+                return null;
+              });
+              if (destUrl && destUrl.startsWith('http')) {
+                console.log(`[FormAgent] Decoded destination URL: ${destUrl}`);
+                await page.goto(destUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
                 await page.waitForTimeout(3000);
               }
-            } catch {}
+            }
           }
+          console.log(`[FormAgent] Landed on application page: ${page.url()}`);
         }
       }
     } catch (e) {
@@ -281,10 +296,11 @@ export async function runFormAgent(options: {
     // Location / City
     await tryFill(
       [
-        'input[name*="location" i]',
-        'input[id*="location" i]',
-        'input[name*="city" i]',
-        'input[placeholder*="Location" i]',
+        'form input[name*="location" i]:not([id*="search" i]):not([class*="search" i])',
+        'form input[id*="location" i]:not([id*="search" i]):not([class*="search" i])',
+        'form input[placeholder*="Location" i]:not([id*="search" i]):not([class*="search" i])',
+        'form input[name*="city" i]',
+        'input[autocomplete="address-level2"]',
       ],
       profile.location,
       'Location'
