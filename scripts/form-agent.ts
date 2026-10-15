@@ -221,7 +221,7 @@ export async function runFormAgent(options: {
       location: 'Istanbul, Turkey',
       linkedin: 'https://linkedin.com/in/alireza-rahimpanah-b7010a301',
       github: 'https://github.com/say-alireza',
-      website: 'https://say-alireza.github.io/nextjs-resume/',
+      website: 'https://alirezarp.is-a.dev/',
     };
 
     const filledFields: string[] = [];
