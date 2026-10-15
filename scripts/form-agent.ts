@@ -49,19 +49,17 @@ export async function runFormAgent(options: {
     });
   });
 
-  const page = await context.newPage();
+  let page = await context.newPage();
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 35000 });
     await page.waitForTimeout(3000);
 
-    const pageTitle = (await page.title()) || 'Software Engineer';
-
     // 1. If page has an "Apply" button, follow it to the actual application form/portal
     try {
       const applyTrigger = page
         .locator(
-          'a#job-cta-alt, a.apply, a:has-text("Apply for this position"), a:has-text("Apply for this job"), a:has-text("Apply now"), button:has-text("Apply"), a[href*="apply"]'
+          'a#job-cta-alt, a.action-apply, a.apply, a:has-text("Apply for this position"), a:has-text("Apply for this job"), a:has-text("Apply now"), button:has-text("Apply"), a[href*="/l/"], a[href*="apply"]'
         )
         .first();
       if ((await applyTrigger.count()) > 0) {
@@ -79,25 +77,38 @@ export async function runFormAgent(options: {
             );
           }
           return { success: true };
-        } else if (href && href.startsWith('http') && !href.includes('weworkremotely.com/remote-jobs')) {
+        } else if (href && href.startsWith('http') && !href.includes('weworkremotely.com/remote-jobs') && !href.includes('remoteok.com/remote-jobs')) {
           console.log(`[FormAgent] Navigating to external application portal: ${href}`);
           await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 35000 });
           await page.waitForTimeout(3000);
         } else {
           // Listen for new tab popup
           const [popup] = await Promise.all([
-            context.waitForEvent('page', { timeout: 4000 }).catch(() => null),
+            context.waitForEvent('page', { timeout: 6000 }).catch(() => null),
             applyTrigger.click({ timeout: 4000 }).catch(() => null),
           ]);
           if (popup) {
-            console.log('[FormAgent] Switched to application popup tab');
-            await popup.waitForLoadState('domcontentloaded');
+            console.log('[FormAgent] Switched active tab to application popup');
+            page = popup;
+            await page.waitForLoadState('domcontentloaded');
+            // If the popup is on an intermediary redirect (e.g. RemoteOK /l/ or affiliate link), wait for the final landing page
+            try {
+              if (page.url().includes('/l/')) {
+                console.log('[FormAgent] Waiting for intermediary redirect to settle...');
+                await page.waitForURL((u) => !u.toString().includes('/l/'), { timeout: 10000 });
+                await page.waitForLoadState('domcontentloaded');
+                await page.waitForTimeout(3000);
+              }
+            } catch {}
           }
         }
       }
     } catch (e) {
       console.warn('[FormAgent] Apply button follow error:', e);
     }
+
+    // Refresh pageTitle after navigation
+    const pageTitle = (await page.title()) || 'Software Engineer';
 
     // 2. Try to automatically solve Cloudflare Turnstile / Checkbox if present
     try {
